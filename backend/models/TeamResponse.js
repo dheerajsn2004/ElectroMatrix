@@ -7,7 +7,7 @@ const teamResponseSchema = new mongoose.Schema({
   cell: { type: Number, required: true, min: 0, max: 5 },
   answerGiven: { type: String, default: "" },
   isCorrect: { type: Boolean, default: false },
-  attempts: { type: Number, default: 0 },         // ✅ attempt count
+  attempts: { type: Number, default: 0 },
   answeredAt: { type: Date }
 }, { timestamps: true });
 
