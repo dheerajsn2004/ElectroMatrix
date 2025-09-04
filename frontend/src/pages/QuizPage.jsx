@@ -125,9 +125,17 @@ export default function QuizPage() {
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
   // grid/section state
-  const [section, setSection] = useState(1);
+const [section, setSection] = useState(() => {
+  const saved = Number(localStorage.getItem("activeSection"));
+  return [1,2,3].includes(saved) ? saved : 1;
+});
   const [sections, setSections] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(true);
+
+  useEffect(() => {
+  localStorage.setItem("activeSection", String(section));
+}, [section]);
+
 
   // modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -178,18 +186,22 @@ export default function QuizPage() {
   useEffect(() => { loadSections(); }, []);
 
   // when section changes or grid updates, check if unlocked
-  useEffect(() => {
-    const s = sections.find((x) => x.id === section);
-    const allSolved = s?.cells?.every((c) => c.answered) || false;
-    if (allSolved) refreshBonus(section);
-    else {
-      setBonusLocked(true);
-      setBonusQs([]);
-      setCompositeUrl("");
-      setRemaining(null);
-      setExpired(false);
-    }
-  }, [section, sections]);
+  // when section changes or grid updates, check if unlocked
+useEffect(() => {
+  const s = sections.find((x) => x.id === section);
+  // ✅ Unlock when all 6 tiles have an image (revealed), not only when answered=true
+  const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
+  if (allRevealed) {
+    refreshBonus(section);
+  } else {
+    setBonusLocked(true);
+    setBonusQs([]);
+    setCompositeUrl("");
+    setRemaining(null);
+    setExpired(false);
+  }
+}, [section, sections]);
+
 
   // cosmetic countdown (UI only; backend enforces real time)
   useEffect(() => {
@@ -228,27 +240,37 @@ export default function QuizPage() {
 
   // submit answer for a cell
   const submitAnswer = async (answer) => {
-    if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
-    setSubmitting(true);
-    setErrorMsg("");
-    try {
-      const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
-      setAttemptsLeft(data.attemptsLeft);
-      if (data.correct) {
-        setSolved(true);
-        setModalOpen(false);
-        // refresh to reveal image; then check if section unlocked (which will start timer on server)
-        await loadSections();
-      } else {
-        setSolved(false);
-        setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
+  if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
+  setSubmitting(true);
+  setErrorMsg("");
+  try {
+    const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
+    setAttemptsLeft(data.attemptsLeft);
+    if (data.correct) {
+      setSolved(true);
+      setModalOpen(false);
+      await loadSections(); // reveals image for solved
+    } else {
+      setSolved(false);
+      setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
+      if (data.attemptsLeft === 0) {
+        // attempts exhausted → backend now provides image in sections → refresh
+        await loadSections();                                  // 👈 NEW
+        setModalOpen(false); // optional: close modal when exhausted
       }
-    } catch (e) {
-      setErrorMsg(e?.response?.data?.error || "Error submitting answer");
-    } finally {
-      setSubmitting(false);
     }
-  };
+  } catch (e) {
+    const msg = e?.response?.data?.error || "Error submitting answer";
+    setErrorMsg(msg);
+    // if backend returned attempts exhausted with imageUrl on 403
+    if (e?.response?.status === 403 && e?.response?.data?.attemptsLeft === 0) {
+      await loadSections();                                    // 👈 NEW
+      setModalOpen(false); // optional
+    }
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const current = sections.find((s) => s.id === section) || {
     cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, answered: false, attemptsLeft: 5, imageUrl: "" }))
@@ -271,7 +293,7 @@ export default function QuizPage() {
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
             <button
-              onClick={() => { localStorage.removeItem("team"); navigate("/login"); }}
+              onClick={() => { localStorage.removeItem("team"); navigate("/login"); localStorage.removeItem("activeSection");}}
               className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700 w-full sm:w-auto"
             >
               Logout
@@ -307,16 +329,17 @@ export default function QuizPage() {
                   className={`aspect-square rounded-xl sm:rounded-2xl flex items-center justify-center text-xl sm:text-2xl font-bold border relative overflow-hidden
                     ${answered ? "border-emerald-400" : "bg-gray-800 border-gray-700 hover:bg-gray-700 active:scale-[0.98] transition-transform"}`}
                 >
-                  {answered && imageUrl ? (
-                    <img src={imageUrl} alt={`Section ${section} Cell ${cell+1}`} className="w-full h-full object-cover" />
-                  ) : (
-                    <>
-                      {cell + 1}
-                      <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-300">
-                        {al ?? "—"}/5
-                      </span>
-                    </>
-                  )}
+                  {imageUrl ? (                                             // 👈 CHANGED
+  <img src={imageUrl} alt={`Section ${section} Cell ${cell+1}`} className="w-full h-full object-cover" />
+) : (
+  <>
+    {cell + 1}
+    <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-300">
+      {al ?? "—"}/5
+    </span>
+  </>
+)}
+
                 </button>
               ))
             )}
@@ -326,15 +349,19 @@ export default function QuizPage() {
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
-            {!bonusLocked && remaining != null && (
-              <div className={`text-sm px-3 py-1 rounded-lg border ${
-                expired || remaining === 0 ? "border-red-500 text-red-400" : "border-cyan-500 text-cyan-300"
-              }`}>
-                {expired || remaining === 0 ? "Time over" : `Time left: ${fmt(remaining)}`}
-              </div>
-            )}
-          </div>
+  <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
+  {!bonusLocked && (
+    <div className={`text-sm px-3 py-1 rounded-lg border ${
+      expired ? "border-red-500 text-red-400" :
+      remaining === null ? "border-emerald-500 text-emerald-400" :
+      "border-cyan-500 text-cyan-300"
+    }`}>
+      {expired ? "Time over" :
+       remaining === null ? "Completed" : `Time left: ${fmt(remaining)}`}
+    </div>
+  )}
+</div>
+
 
           {bonusLocked ? (
             <div className="text-gray-300 text-sm sm:text-base">Solve all 6 cells to unlock these questions.</div>
