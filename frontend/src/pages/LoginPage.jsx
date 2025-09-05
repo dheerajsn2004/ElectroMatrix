@@ -14,7 +14,7 @@ export default function LoginPage() {
     try {
       const res = await api.post("/login", { username, password });
       localStorage.setItem("team", JSON.stringify(res.data.team));
-      navigate("/quiz");
+      navigate("https://electro-matrix.vercel.app/quiz");
     } catch (err) {
       setMessage(err.response?.data?.error || "Login failed");
     }

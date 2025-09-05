@@ -43,7 +43,7 @@ export default function LandingPage() {
           Solve puzzles, reveal circuits, and compete for the top spot.
         </p>
 
-        <button onClick={() => navigate("/login")} className="btn-primary mt-10">
+        <button onClick={() => navigate("https://electro-matrix.vercel.app/login")} className="btn-primary mt-10">
           Get Started <span className="text-2xl leading-none">→</span>
         </button>
       </div>
