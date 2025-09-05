@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 
-// ---------- Modal (single grid cell question) ----------
+/* ---------------- Modal for single grid-cell question ---------------- */
 function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, onSubmit, loading }) {
   const [answer, setAnswer] = useState("");
   useEffect(() => { setAnswer(""); }, [open, prompt]);
@@ -54,7 +54,7 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
   );
 }
 
-// ---------- Section meta-question card (stacked) ----------
+/* --------------- Section meta-question card (stacked) --------------- */
 function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +75,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      onSubmit(); // refresh parent (re-fetch attempts/timer)
+      onSubmit(); // refresh attempts/timer from server
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
     } finally {
@@ -117,6 +117,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   );
 }
 
+/* ------------------------------ Main page --------------------------- */
 export default function QuizPage() {
   const navigate = useNavigate();
   const team = useMemo(() => {
@@ -124,18 +125,15 @@ export default function QuizPage() {
   }, []);
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
-  // grid/section state
-const [section, setSection] = useState(() => {
-  const saved = Number(localStorage.getItem("activeSection"));
-  return [1,2,3].includes(saved) ? saved : 1;
-});
+  /* Section state persisted so refresh keeps the same section */
+  const [section, setSection] = useState(() => {
+    const saved = Number(localStorage.getItem("activeSection"));
+    return [1,2,3].includes(saved) ? saved : 1;
+  });
+  useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
+
   const [sections, setSections] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(true);
-
-  useEffect(() => {
-  localStorage.setItem("activeSection", String(section));
-}, [section]);
-
 
   // modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -185,25 +183,22 @@ const [section, setSection] = useState(() => {
   // initial grid load
   useEffect(() => { loadSections(); }, []);
 
-  // when section changes or grid updates, check if unlocked
-  // when section changes or grid updates, check if unlocked
-useEffect(() => {
-  const s = sections.find((x) => x.id === section);
-  // ✅ Unlock when all 6 tiles have an image (revealed), not only when answered=true
-  const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
-  if (allRevealed) {
-    refreshBonus(section);
-  } else {
-    setBonusLocked(true);
-    setBonusQs([]);
-    setCompositeUrl("");
-    setRemaining(null);
-    setExpired(false);
-  }
-}, [section, sections]);
+  // unlock when all 6 tiles have an image (revealed), not only when answered=true
+  useEffect(() => {
+    const s = sections.find((x) => x.id === section);
+    const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
+    if (allRevealed) {
+      refreshBonus(section);
+    } else {
+      setBonusLocked(true);
+      setBonusQs([]);
+      setCompositeUrl("");
+      setRemaining(null);
+      setExpired(false);
+    }
+  }, [section, sections]);
 
-
-  // cosmetic countdown (UI only; backend enforces real time)
+  // UI countdown (server remains source of truth)
   useEffect(() => {
     if (bonusLocked || remaining == null || expired) return;
     const id = setInterval(() => {
@@ -212,7 +207,7 @@ useEffect(() => {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // occasional server resync to avoid drift
+  // periodic resync with server
   useEffect(() => {
     if (bonusLocked || expired) return;
     const id = setInterval(() => refreshBonus(section), 15000);
@@ -240,43 +235,41 @@ useEffect(() => {
 
   // submit answer for a cell
   const submitAnswer = async (answer) => {
-  if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
-  setSubmitting(true);
-  setErrorMsg("");
-  try {
-    const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
-    setAttemptsLeft(data.attemptsLeft);
-    if (data.correct) {
-      setSolved(true);
-      setModalOpen(false);
-      await loadSections(); // reveals image for solved
-    } else {
-      setSolved(false);
-      setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
-      if (data.attemptsLeft === 0) {
-        // attempts exhausted → backend now provides image in sections → refresh
-        await loadSections();                                  // 👈 NEW
-        setModalOpen(false); // optional: close modal when exhausted
+    if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
+      setAttemptsLeft(data.attemptsLeft);
+      if (data.correct) {
+        setSolved(true);
+        setModalOpen(false);
+        await loadSections(); // reveals image for solved
+      } else {
+        setSolved(false);
+        setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
+        if (data.attemptsLeft === 0) {
+          // exhausted attempts → image still revealed
+          await loadSections();
+          setModalOpen(false);
+        }
       }
+    } catch (e) {
+      const msg = e?.response?.data?.error || "Error submitting answer";
+      setErrorMsg(msg);
+      if (e?.response?.status === 403 && e?.response?.data?.attemptsLeft === 0) {
+        await loadSections();
+        setModalOpen(false);
+      }
+    } finally {
+      setSubmitting(false);
     }
-  } catch (e) {
-    const msg = e?.response?.data?.error || "Error submitting answer";
-    setErrorMsg(msg);
-    // if backend returned attempts exhausted with imageUrl on 403
-    if (e?.response?.status === 403 && e?.response?.data?.attemptsLeft === 0) {
-      await loadSections();                                    // 👈 NEW
-      setModalOpen(false); // optional
-    }
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   const current = sections.find((s) => s.id === section) || {
     cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, answered: false, attemptsLeft: 5, imageUrl: "" }))
   };
 
-  // helper to format seconds mm:ss
   const fmt = (sec) => {
     if (sec == null) return "";
     const m = Math.floor(sec / 60);
@@ -285,16 +278,26 @@ useEffect(() => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    // If you’re using RootLayout, it provides the background.
+    // We just render our page body here so it matches landing page styling.
+    <section className="page-shell">
+      <div className="w-full max-w-5xl">
         {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-cyan-400">ElectroMatrix – Quiz</h1>
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide">
+            <span className="text-teal-400">Electro</span>
+            <span className="text-green-400">Matrix</span>
+            <span className="text-gray-300 ml-3">– Quiz</span>
+          </h1>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
             <button
-              onClick={() => { localStorage.removeItem("team"); navigate("/login"); localStorage.removeItem("activeSection");}}
-              className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700 w-full sm:w-auto"
+              onClick={() => {
+                localStorage.removeItem("team");
+                localStorage.removeItem("activeSection");
+                navigate("/login");
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white"
             >
               Logout
             </button>
@@ -308,7 +311,8 @@ useEffect(() => {
               key={s}
               onClick={() => setSection(s)}
               className={`px-4 py-2 rounded-lg border text-sm sm:text-base ${
-                section===s ? "bg-cyan-600 border-cyan-500" : "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                section===s ? "bg-teal-500/30 border-teal-400 text-teal-200"
+                             : "bg-gray-800 border-gray-700 hover:bg-gray-700"
               }`}
             >
               Section {s}
@@ -316,7 +320,7 @@ useEffect(() => {
           ))}
         </div>
 
-        {/* 2×3 Grid (centered & touch-friendly) */}
+        {/* 2×3 Grid */}
         <div className="flex items-center justify-center">
           <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full max-w-xs sm:max-w-md">
             {loadingGrid ? (
@@ -329,17 +333,16 @@ useEffect(() => {
                   className={`aspect-square rounded-xl sm:rounded-2xl flex items-center justify-center text-xl sm:text-2xl font-bold border relative overflow-hidden
                     ${answered ? "border-emerald-400" : "bg-gray-800 border-gray-700 hover:bg-gray-700 active:scale-[0.98] transition-transform"}`}
                 >
-                  {imageUrl ? (                                             // 👈 CHANGED
-  <img src={imageUrl} alt={`Section ${section} Cell ${cell+1}`} className="w-full h-full object-cover" />
-) : (
-  <>
-    {cell + 1}
-    <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-300">
-      {al ?? "—"}/5
-    </span>
-  </>
-)}
-
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={`Section ${section} Cell ${cell+1}`} className="w-full h-full object-cover" />
+                  ) : (
+                    <>
+                      {cell + 1}
+                      <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-300">
+                        {al ?? "—"}/5
+                      </span>
+                    </>
+                  )}
                 </button>
               ))
             )}
@@ -349,25 +352,23 @@ useEffect(() => {
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-  <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
-  {!bonusLocked && (
-    <div className={`text-sm px-3 py-1 rounded-lg border ${
-      expired ? "border-red-500 text-red-400" :
-      remaining === null ? "border-emerald-500 text-emerald-400" :
-      "border-cyan-500 text-cyan-300"
-    }`}>
-      {expired ? "Time over" :
-       remaining === null ? "Completed" : `Time left: ${fmt(remaining)}`}
-    </div>
-  )}
-</div>
-
+            <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
+            {!bonusLocked && (
+              <div className={`text-sm px-3 py-1 rounded-lg border ${
+                expired ? "border-red-500 text-red-400" :
+                remaining === null ? "border-emerald-500 text-emerald-400" :
+                "border-teal-500 text-teal-300"
+              }`}>
+                {expired ? "Time over" :
+                 remaining === null ? "Completed" : `Time left: ${fmt(remaining)}`}
+              </div>
+            )}
+          </div>
 
           {bonusLocked ? (
             <div className="text-gray-300 text-sm sm:text-base">Solve all 6 cells to unlock these questions.</div>
           ) : (
             <>
-              {/* smaller composite image */}
               {compositeUrl && (
                 <div className="mb-4 flex justify-center">
                   <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-900 max-w-md w-full">
@@ -380,7 +381,6 @@ useEffect(() => {
                 </div>
               )}
 
-              {/* questions stacked vertically */}
               <div className="space-y-4">
                 {bonusQs.map((q) => (
                   <SectionQuestionCard
@@ -408,6 +408,6 @@ useEffect(() => {
           loading={submitting}
         />
       </div>
-    </div>
+    </section>
   );
 }

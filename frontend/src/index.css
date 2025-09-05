@@ -2,9 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
+/* Grid background (like landing) */
+.bg-grid {
+  --grid-size: 40px;
+  --grid-color: rgba(255, 255, 255, 0.06);
+  --grid-color-2: rgba(255, 255, 255, 0.025);
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-color-2) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color-2) 1px, transparent 1px);
+  background-size:
+    var(--grid-size) var(--grid-size),
+    var(--grid-size) var(--grid-size),
+    calc(var(--grid-size) / 5) calc(var(--grid-size) / 5),
+    calc(var(--grid-size) / 5) calc(var(--grid-size) / 5);
+}
+
+/* Centered page container (matches landing spacing) */
+.page-shell {
+  min-height: calc(100vh - 56px - 64px); /* minus header + footer */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: 1.25rem;
+}
+
+/* Reusable components */
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-700 rounded-2xl p-5 text-white;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-8 py-4 rounded-lg
+      bg-teal-400/90 text-[#0b1012] hover:bg-teal-300 transition
+      shadow-[0_10px_30px_rgba(45,212,191,0.35)];
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-lg
+      bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white;
+  }
 }

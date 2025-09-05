@@ -1,18 +1,18 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../utils/api";  // ✅ use your helper
+import { api } from "../utils/api";
 
 export default function LoginPage() {
+  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-  const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setMessage("");
     try {
-      const res = await api.post("/login", { username, password }); // ✅ no need full URL
+      const res = await api.post("/login", { username, password });
       localStorage.setItem("team", JSON.stringify(res.data.team));
       navigate("/quiz");
     } catch (err) {
@@ -21,30 +21,38 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center text-white">
-      <div className="bg-gray-800 p-8 rounded-2xl shadow-lg w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center text-cyan-400 mb-6">Team Login</h1>
-        <form onSubmit={handleSubmit} className="space-y-6">
+    <section className="page-shell flex items-center justify-center">
+      <div className="w-full max-w-md card flex flex-col items-center">
+        {/* Centered title */}
+        <h1 className="text-2xl font-bold text-teal-400 mb-6 text-center">
+          Team Login
+        </h1>
+
+        <form onSubmit={submit} className="w-full space-y-4">
           <input
-            type="text"
+            className="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
           <input
             type="password"
+            className="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
-          <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-3 rounded-lg font-semibold hover:scale-105 transition">
-            Login
-          </button>
+         <button
+  type="submit"
+  className="btn-primary w-full flex items-center justify-center text-center"
+>
+  Login
+</button>
+
         </form>
+
         {message && <p className="mt-4 text-center text-red-300">{message}</p>}
       </div>
-    </div>
+    </section>
   );
 }

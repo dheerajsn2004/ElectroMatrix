@@ -1,23 +1,52 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex flex-col">
-      <section className="flex flex-1 items-center justify-center flex-col text-center px-6 py-12">
-        <h1 className="text-5xl md:text-7xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 drop-shadow-lg animate-pulse">
-          ElectroMatrix ⚡
+    <section className="page-shell text-center">
+      <div className="mx-auto max-w-4xl">
+        {/* icon */}
+        <div className="mb-6 flex justify-center">
+          <svg
+            width="88"
+            height="88"
+            viewBox="0 0 24 24"
+            className="block mx-auto text-teal-400 drop-shadow-[0_0_20px_rgba(45,212,191,0.35)]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden="true"
+          >
+            <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" />
+            <rect x="9.5" y="9.5" width="5" height="5" rx="1.2" />
+            <line x1="12" y1="2"  x2="12" y2="4"  />
+            <line x1="12" y1="20" x2="12" y2="22" />
+            <line x1="4"  y1="12" x2="2"  y2="12" />
+            <line x1="22" y1="12" x2="20" y2="12" />
+          </svg>
+        </div>
+
+        {/* title */}
+        <h1 className="text-[40px] sm:text-6xl md:text-7xl font-extrabold tracking-wide leading-tight">
+          <span className="text-teal-400 drop-shadow-[0_0_30px_rgba(45,212,191,0.35)]">Electro</span>
+          <span className="text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.35)]">Matrix</span>
         </h1>
-        <p className="mt-6 text-lg md:text-2xl text-gray-300 max-w-2xl">
-          Where Innovation Meets Circuits – IEEE presents the ultimate tech showdown.
+
+        <p className="mt-6 text-xl sm:text-3xl text-gray-300/90 tracking-wide">
+          Crack the Grid, Unleash the Circuit
         </p>
-        <Link
-          to="/login"
-          className="mt-8 px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-2xl shadow-lg hover:shadow-cyan-500/50 hover:scale-110 transition-all duration-300 inline-block"
-        >
-          Get Started
-        </Link>
-      </section>
-    </div>
+
+        <p className="mt-6 max-w-3xl mx-auto text-base sm:text-lg text-gray-400 leading-8">
+          Challenge your electronics knowledge across Analog, Digital, and advanced circuits.
+          Solve puzzles, reveal circuits, and compete for the top spot.
+        </p>
+
+        <button onClick={() => navigate("/login")} className="btn-primary mt-10">
+          Get Started <span className="text-2xl leading-none">→</span>
+        </button>
+      </div>
+    </section>
   );
 }
