@@ -9,8 +9,8 @@ export default function App() {
     <Routes>
       <Route element={<RootLayout />}>
         <Route path="/" element={<LandingPage />} />
-        <Route path="https://electro-matrix.vercel.app/login" element={<LoginPage />} />
-        <Route path="https://electro-matrix.vercel.app/quiz" element={<QuizPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/quiz" element={<QuizPage />} />
       </Route>
     </Routes>
   );
