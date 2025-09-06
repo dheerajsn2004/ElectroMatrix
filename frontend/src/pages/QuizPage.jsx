@@ -318,13 +318,9 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid (tight rectangular, removes inside edges when all revealed) */}
+        {/* Grid (no gap, seamless layout always) */}
         <div className="flex items-center justify-center">
-          <div
-            className={`grid grid-cols-3 grid-rows-2 w-full max-w-md ${
-              allRevealed ? "gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60" : "gap-3 sm:gap-4"
-            }`}
-          >
+          <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
             {loadingGrid ? (
               <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
             ) : (
@@ -332,11 +328,7 @@ export default function QuizPage() {
                 <button
                   key={cell}
                   onClick={() => !allRevealed && openCell(cell)}
-                  className={`aspect-square ${
-                    allRevealed
-                      ? "p-0 m-0 border-0"
-                      : "bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-md"
-                  }`}
+                  className="aspect-square p-0 m-0 border border-gray-700"
                 >
                   {imageUrl ? (
                     <img
