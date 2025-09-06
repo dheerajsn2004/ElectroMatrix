@@ -17,7 +17,7 @@ async function teamSolvedAllCells(teamId, section) {
   return solvedCount >= 6;
 }
 
-// NEW: consider a cell "completed" if solved OR attempts exhausted
+// ✅ NEW: consider a cell "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
   const docs = await TeamResponse.find(
     { team: teamId, section },
@@ -32,29 +32,25 @@ async function teamCompletedAllCells(teamId, section) {
 }
 
 async function ensureSectionTimer(teamId, section) {
-  // create timer once when the section grid is fully REVEALED (solved OR exhausted)
   let existing = await TeamSectionTimer.findOne({ team: teamId, section });
   if (existing) return existing;
 
-  const unlocked = await teamCompletedAllCells(teamId, section); // CHANGED
+  const unlocked = await teamCompletedAllCells(teamId, section); // ✅ CHANGED
   if (!unlocked) return null;
 
-  const timer = await TeamSectionTimer.create({
+  return await TeamSectionTimer.create({
     team: teamId,
     section,
     startedAt: new Date(),
-    durationSec: 20 * 60,
+    durationSec: 20 * 60, // 20 minutes
   });
-  return timer;
 }
 
 function computeRemainingSeconds(timerDoc) {
   if (!timerDoc) return null;
-  // if timer was stopped (all 3 section questions solved), it doesn't count down
   if (timerDoc.stoppedAt) return null; // null = stopped/completed
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
-  const remaining = Math.max(0, timerDoc.durationSec - elapsed);
-  return remaining;
+  return Math.max(0, timerDoc.durationSec - elapsed);
 }
 
 // ---------- GRID SECTION ----------
@@ -73,7 +69,7 @@ export async function getSections(req, res) {
       const solved = !!r?.isCorrect;
       const attempts = r?.attempts || 0;
       const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
-      const shouldShowImage = solved || attemptsLeft === 0; // reveal on solve OR attempts exhausted
+      const shouldShowImage = solved || attemptsLeft === 0;
       return {
         cell: i,
         answered: solved,
@@ -137,7 +133,7 @@ export async function submitAnswer(req, res) {
 
   const currentAttempts = tr?.attempts || 0;
 
-  // if already exhausted → still return image
+  // already exhausted → still return image
   if (currentAttempts >= MAX_ATTEMPTS) {
     return res.status(403).json({
       error: "No attempts left",
@@ -156,10 +152,10 @@ export async function submitAnswer(req, res) {
   );
 
   if (isCorrect) {
-    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } }, { new: false });
+    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
   }
 
-  // NEW: if this action made the grid fully REVEALED (solved or exhausted), start timer
+  // ✅ NEW: if grid is fully revealed (solved or exhausted), start timer
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -175,7 +171,7 @@ export async function submitAnswer(req, res) {
   });
 }
 
-// ---------- SECTION CHALLENGE (3 Qs after grid fully revealed) ----------
+// ---------- SECTION CHALLENGE ----------
 export async function getSectionQuestions(req, res) {
   const teamId = req.team._id;
   const section = Number(req.query.section);
@@ -183,8 +179,8 @@ export async function getSectionQuestions(req, res) {
     return res.status(400).json({ error: "Invalid section" });
   }
 
-  // UNLOCK when all tiles are revealed (solved OR exhausted)
-  const unlocked = await teamCompletedAllCells(teamId, section); // CHANGED
+  // ✅ UNLOCK when all tiles are revealed
+  const unlocked = await teamCompletedAllCells(teamId, section);
   if (!unlocked) {
     return res.json({
       locked: true,
@@ -195,10 +191,9 @@ export async function getSectionQuestions(req, res) {
     });
   }
 
-  // create timer if missing, then compute remaining
   const timer = await ensureSectionTimer(teamId, section);
   const remainingSeconds = computeRemainingSeconds(timer);
-  const expired = remainingSeconds === 0; // null means stopped, not expired
+  const expired = remainingSeconds === 0;
 
   const [qs, rs, meta] = await Promise.all([
     SectionQuestion.find({ section }).sort({ idx: 1 }).lean(),
@@ -237,7 +232,6 @@ export async function submitSectionAnswer(req, res) {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
-  // timer must exist and not be expired (unless stopped after completion)
   const timer = await ensureSectionTimer(teamId, section);
   if (!timer) return res.status(403).json({ error: "Section challenge locked" });
 
@@ -278,9 +272,9 @@ export async function submitSectionAnswer(req, res) {
   );
 
   if (isCorrect) {
-    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } }, { new: false });
+    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
 
-    // if all 3 section questions are solved → stop the timer
+    // ✅ Stop timer if all 3 meta-questions solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
     if (solvedCount >= 3) {
       await TeamSectionTimer.findOneAndUpdate(

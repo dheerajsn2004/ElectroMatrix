@@ -1,8 +1,9 @@
+// frontend/src/pages/QuizPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 
-/* ---------------- Modal for single grid-cell question ---------------- */
+// ---------- Modal (single grid cell question) ----------
 function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, onSubmit, loading }) {
   const [answer, setAnswer] = useState("");
   useEffect(() => { setAnswer(""); }, [open, prompt]);
@@ -26,7 +27,7 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
           onChange={(e) => setAnswer(e.target.value)}
           placeholder="Type your answer…"
           className={`w-full p-3 rounded-lg bg-gray-800 border focus:outline-none focus:ring-2
-            ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-cyan-500"}`}
+            ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-teal-500"}`}
           disabled={disabled}
         />
         {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
@@ -42,7 +43,7 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
           <button
             onClick={() => onSubmit(answer)}
             className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
-              disabled ? "bg-gray-700 cursor-not-allowed" : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90"
+              disabled ? "bg-gray-700 cursor-not-allowed" : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
             }`}
             disabled={disabled || loading}
           >
@@ -54,7 +55,7 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
   );
 }
 
-/* --------------- Section meta-question card (stacked) --------------- */
+// ---------- Section meta-question card ----------
 function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +76,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      onSubmit(); // refresh attempts/timer from server
+      onSubmit();
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
     } finally {
@@ -107,7 +108,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         <button
           onClick={submit}
           disabled={disabled || submitting}
-          className={`w-full md:w-auto px-4 py-3 rounded-lg ${disabled ? "bg-gray-700 cursor-not-allowed" : "bg-cyan-600 hover:bg-cyan-500"}`}
+          className={`w-full md:w-auto px-4 py-3 rounded-lg ${disabled ? "bg-gray-700 cursor-not-allowed" : "bg-teal-600 hover:bg-teal-500"}`}
         >
           {submitting ? "Submitting…" : "Submit"}
         </button>
@@ -117,7 +118,6 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   );
 }
 
-/* ------------------------------ Main page --------------------------- */
 export default function QuizPage() {
   const navigate = useNavigate();
   const team = useMemo(() => {
@@ -125,13 +125,11 @@ export default function QuizPage() {
   }, []);
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
-  /* Section state persisted so refresh keeps the same section */
   const [section, setSection] = useState(() => {
     const saved = Number(localStorage.getItem("activeSection"));
     return [1,2,3].includes(saved) ? saved : 1;
   });
-  useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
-
+  const [unlockedSection, setUnlockedSection] = useState(1); // ✅ NEW
   const [sections, setSections] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(true);
 
@@ -144,25 +142,29 @@ export default function QuizPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // section challenge state (+ timer)
+  // section challenge state
   const [bonusLocked, setBonusLocked] = useState(true);
   const [bonusQs, setBonusQs] = useState([]);
   const [compositeUrl, setCompositeUrl] = useState("");
-  const [remaining, setRemaining] = useState(null); // seconds from backend
+  const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
-  // fetch grid state
+  // persist active section
+  useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
+
   const loadSections = async () => {
     setLoadingGrid(true);
     try {
       const { data } = await api.get("/quiz/sections");
+      setUnlockedSection(data.unlockedSection || 1);
+      if (section > (data.unlockedSection || 1)) setSection(data.unlockedSection || 1);
       setSections(data.sections || []);
     } finally {
       setLoadingGrid(false);
     }
   };
+  useEffect(() => { loadSections(); }, []);
 
-  // fetch section challenge (questions + timer + composite image)
   const refreshBonus = async (sec) => {
     try {
       const { data } = await api.get("/quiz/section-questions", { params: { section: sec } });
@@ -180,10 +182,6 @@ export default function QuizPage() {
     }
   };
 
-  // initial grid load
-  useEffect(() => { loadSections(); }, []);
-
-  // unlock when all 6 tiles have an image (revealed), not only when answered=true
   useEffect(() => {
     const s = sections.find((x) => x.id === section);
     const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
@@ -198,7 +196,7 @@ export default function QuizPage() {
     }
   }, [section, sections]);
 
-  // UI countdown (server remains source of truth)
+  // countdown (frontend cosmetic)
   useEffect(() => {
     if (bonusLocked || remaining == null || expired) return;
     const id = setInterval(() => {
@@ -207,14 +205,13 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // periodic resync with server
+  // resync with server
   useEffect(() => {
     if (bonusLocked || expired) return;
     const id = setInterval(() => refreshBonus(section), 15000);
     return () => clearInterval(id);
   }, [bonusLocked, expired, section]);
 
-  // open modal for a cell
   const openCell = async (cell) => {
     setCurrentCell(cell);
     setModalOpen(true);
@@ -222,7 +219,6 @@ export default function QuizPage() {
     setAttemptsLeft(5);
     setSolved(false);
     setErrorMsg("");
-
     try {
       const { data } = await api.get("/quiz/question", { params: { section, cell } });
       setQuestion(data.prompt);
@@ -233,7 +229,6 @@ export default function QuizPage() {
     }
   };
 
-  // submit answer for a cell
   const submitAnswer = async (answer) => {
     if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
     setSubmitting(true);
@@ -244,12 +239,11 @@ export default function QuizPage() {
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
-        await loadSections(); // reveals image for solved
+        await loadSections();
       } else {
         setSolved(false);
         setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
         if (data.attemptsLeft === 0) {
-          // exhausted attempts → image still revealed
           await loadSections();
           setModalOpen(false);
         }
@@ -277,27 +271,25 @@ export default function QuizPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const switchSection = (s) => {
+    if (s > unlockedSection) {
+      alert("This section is locked. Complete the previous section first.");
+      return;
+    }
+    setSection(s);
+  };
+
   return (
-    // If you’re using RootLayout, it provides the background.
-    // We just render our page body here so it matches landing page styling.
     <section className="page-shell">
-      <div className="w-full max-w-5xl">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wide">
-            <span className="text-teal-400">Electro</span>
-            <span className="text-green-400">Matrix</span>
-            <span className="text-gray-300 ml-3">– Quiz</span>
-          </h1>
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-teal-400">ElectroMatrix – Quiz</h1>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
             <button
-              onClick={() => {
-                localStorage.removeItem("team");
-                localStorage.removeItem("activeSection");
-                navigate("/login");
-              }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white"
+              onClick={() => { localStorage.removeItem("team"); localStorage.removeItem("activeSection"); navigate("/login"); }}
+              className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700"
             >
               Logout
             </button>
@@ -306,18 +298,26 @@ export default function QuizPage() {
 
         {/* Section Tabs */}
         <div className="flex gap-2 sm:gap-3 mb-6 flex-wrap">
-          {[1,2,3].map((s) => (
-            <button
-              key={s}
-              onClick={() => setSection(s)}
-              className={`px-4 py-2 rounded-lg border text-sm sm:text-base ${
-                section===s ? "bg-teal-500/30 border-teal-400 text-teal-200"
-                             : "bg-gray-800 border-gray-700 hover:bg-gray-700"
-              }`}
-            >
-              Section {s}
-            </button>
-          ))}
+          {[1,2,3].map((s) => {
+            const locked = s > unlockedSection;
+            return (
+              <button
+                key={s}
+                onClick={() => switchSection(s)}
+                disabled={locked}
+                className={`px-4 py-2 rounded-lg border text-sm sm:text-base ${
+                  section===s
+                    ? "bg-teal-500/30 border-teal-400 text-teal-200"
+                    : locked
+                      ? "bg-gray-800/60 border-gray-700/60 text-gray-500 cursor-not-allowed"
+                      : "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                }`}
+                title={locked ? "Locked: finish previous section" : ""}
+              >
+                Section {s}{locked ? " 🔒" : ""}
+              </button>
+            );
+          })}
         </div>
 
         {/* 2×3 Grid */}
@@ -372,15 +372,10 @@ export default function QuizPage() {
               {compositeUrl && (
                 <div className="mb-4 flex justify-center">
                   <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-900 max-w-md w-full">
-                    <img
-                      src={compositeUrl}
-                      alt={`Section ${section} Composite`}
-                      className="w-full h-auto object-contain"
-                    />
+                    <img src={compositeUrl} alt={`Section ${section} Composite`} className="w-full h-auto object-contain" />
                   </div>
                 </div>
               )}
-
               <div className="space-y-4">
                 {bonusQs.map((q) => (
                   <SectionQuestionCard
