@@ -129,7 +129,7 @@ export default function QuizPage() {
     const saved = Number(localStorage.getItem("activeSection"));
     return [1,2,3].includes(saved) ? saved : 1;
   });
-  const [unlockedSection, setUnlockedSection] = useState(1); // ✅ NEW
+  const [unlockedSection, setUnlockedSection] = useState(1);
   const [sections, setSections] = useState([]);
   const [loadingGrid, setLoadingGrid] = useState(true);
 
@@ -145,7 +145,6 @@ export default function QuizPage() {
   // section challenge state
   const [bonusLocked, setBonusLocked] = useState(true);
   const [bonusQs, setBonusQs] = useState([]);
-  const [compositeUrl, setCompositeUrl] = useState("");
   const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
@@ -170,13 +169,11 @@ export default function QuizPage() {
       const { data } = await api.get("/quiz/section-questions", { params: { section: sec } });
       setBonusLocked(!!data.locked);
       setBonusQs(data.questions || []);
-      setCompositeUrl(data.compositeImageUrl || "");
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
     } catch {
       setBonusLocked(true);
       setBonusQs([]);
-      setCompositeUrl("");
       setRemaining(null);
       setExpired(false);
     }
@@ -190,7 +187,6 @@ export default function QuizPage() {
     } else {
       setBonusLocked(true);
       setBonusQs([]);
-      setCompositeUrl("");
       setRemaining(null);
       setExpired(false);
     }
@@ -264,6 +260,8 @@ export default function QuizPage() {
     cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, answered: false, attemptsLeft: 5, imageUrl: "" }))
   };
 
+  const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
+
   const fmt = (sec) => {
     if (sec == null) return "";
     const m = Math.floor(sec / 60);
@@ -320,28 +318,32 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* 2×3 Grid */}
+        {/* Grid (tight rectangular) */}
         <div className="flex items-center justify-center">
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full max-w-xs sm:max-w-md">
+          <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md">
             {loadingGrid ? (
               <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
             ) : (
-              current.cells.map(({ cell, answered, attemptsLeft: al, imageUrl }) => (
+              current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
                 <button
                   key={cell}
-                  onClick={() => openCell(cell)}
-                  className={`aspect-square rounded-xl sm:rounded-2xl flex items-center justify-center text-xl sm:text-2xl font-bold border relative overflow-hidden
-                    ${answered ? "border-emerald-400" : "bg-gray-800 border-gray-700 hover:bg-gray-700 active:scale-[0.98] transition-transform"}`}
+                  onClick={() => !allRevealed && openCell(cell)}
+                  className={`aspect-square border ${
+                    allRevealed
+                      ? "p-0 m-0"
+                      : "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                  }`}
                 >
                   {imageUrl ? (
-                    <img src={imageUrl} alt={`Section ${section} Cell ${cell+1}`} className="w-full h-full object-cover" />
+                    <img
+                      src={imageUrl}
+                      alt={`Section ${section} Cell ${cell+1}`}
+                      className={`w-full h-full object-cover ${
+                        allRevealed ? "rounded-none" : "rounded-md"
+                      }`}
+                    />
                   ) : (
-                    <>
-                      {cell + 1}
-                      <span className="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 text-[10px] sm:text-xs text-gray-300">
-                        {al ?? "—"}/5
-                      </span>
-                    </>
+                    <span className="text-gray-300">{al}/5</span>
                   )}
                 </button>
               ))
@@ -368,26 +370,17 @@ export default function QuizPage() {
           {bonusLocked ? (
             <div className="text-gray-300 text-sm sm:text-base">Solve all 6 cells to unlock these questions.</div>
           ) : (
-            <>
-              {compositeUrl && (
-                <div className="mb-4 flex justify-center">
-                  <div className="rounded-xl overflow-hidden border border-gray-700 bg-gray-900 max-w-md w-full">
-                    <img src={compositeUrl} alt={`Section ${section} Composite`} className="w-full h-auto object-contain" />
-                  </div>
-                </div>
-              )}
-              <div className="space-y-4">
-                {bonusQs.map((q) => (
-                  <SectionQuestionCard
-                    key={q.idx}
-                    section={section}
-                    q={q}
-                    onSubmit={() => refreshBonus(section)}
-                    disabledByTime={expired || (remaining !== null && remaining === 0)}
-                  />
-                ))}
-              </div>
-            </>
+            <div className="space-y-4">
+              {bonusQs.map((q) => (
+                <SectionQuestionCard
+                  key={q.idx}
+                  section={section}
+                  q={q}
+                  onSubmit={() => refreshBonus(section)}
+                  disabledByTime={expired || (remaining !== null && remaining === 0)}
+                />
+              ))}
+            </div>
           )}
         </div>
 
