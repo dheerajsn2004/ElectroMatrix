@@ -17,7 +17,7 @@ async function teamSolvedAllCells(teamId, section) {
   return solvedCount >= 6;
 }
 
-// ✅ NEW: consider a cell "completed" if solved OR attempts exhausted
+// Consider a cell "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
   const docs = await TeamResponse.find(
     { team: teamId, section },
@@ -35,7 +35,7 @@ async function ensureSectionTimer(teamId, section) {
   let existing = await TeamSectionTimer.findOne({ team: teamId, section });
   if (existing) return existing;
 
-  const unlocked = await teamCompletedAllCells(teamId, section); // ✅ CHANGED
+  const unlocked = await teamCompletedAllCells(teamId, section);
   if (!unlocked) return null;
 
   return await TeamSectionTimer.create({
@@ -51,6 +51,21 @@ function computeRemainingSeconds(timerDoc) {
   if (timerDoc.stoppedAt) return null; // null = stopped/completed
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
   return Math.max(0, timerDoc.durationSec - elapsed);
+}
+
+// A section is "completed" only if all 3 section questions are solved
+async function sectionCompleted(teamId, section) {
+  const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
+  return solved >= 3;
+}
+
+// Compute which section is unlocked for this team (1..3)
+// Section 1 is always unlocked; Section 2 unlocks when Section 1 completed, etc.
+async function computeUnlockedSection(teamId) {
+  let unlocked = 1;
+  if (await sectionCompleted(teamId, 1)) unlocked = 2;
+  if (await sectionCompleted(teamId, 2)) unlocked = 3;
+  return unlocked;
 }
 
 // ---------- GRID SECTION ----------
@@ -81,18 +96,8 @@ export async function getSections(req, res) {
     return { id: sec, cells };
   });
 
-  // ✅ Figure out how many sections are completed (all 6 cells revealed)
-  let unlockedSection = 1;
-  for (let sec = 1; sec <= 3; sec++) {
-    const s = sections.find(x => x.id === sec);
-    const allRevealed = s?.cells.every(c => Boolean(c.imageUrl)) || false;
-    if (allRevealed) {
-      unlockedSection = sec + 1; // next section unlocks
-    } else {
-      break; // stop at first incomplete section
-    }
-  }
-  if (unlockedSection > 3) unlockedSection = 3; // max cap
+  // ✅ UNLOCK based on completion of 3 meta-questions, not on grid reveal
+  const unlockedSection = await computeUnlockedSection(teamId);
 
   res.json({ sections, unlockedSection });
 }
@@ -169,7 +174,7 @@ export async function submitAnswer(req, res) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
   }
 
-  // ✅ NEW: if grid is fully revealed (solved or exhausted), start timer
+  // if grid fully revealed (solved or exhausted), start timer
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -193,7 +198,7 @@ export async function getSectionQuestions(req, res) {
     return res.status(400).json({ error: "Invalid section" });
   }
 
-  // ✅ UNLOCK when all tiles are revealed
+  // UNLOCK when all tiles are revealed (solved OR exhausted)
   const unlocked = await teamCompletedAllCells(teamId, section);
   if (!unlocked) {
     return res.json({
@@ -288,7 +293,7 @@ export async function submitSectionAnswer(req, res) {
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
 
-    // ✅ Stop timer if all 3 meta-questions solved
+    // Stop timer if all 3 meta-questions solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
     if (solvedCount >= 3) {
       await TeamSectionTimer.findOneAndUpdate(
@@ -298,9 +303,14 @@ export async function submitSectionAnswer(req, res) {
     }
   }
 
+  // 👇 include 'completed' so client can unlock next section right away
+  const nowRemaining = computeRemainingSeconds(timer);
+  const completedNow = await sectionCompleted(teamId, section);
+
   return res.json({
     correct: isCorrect,
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
-    remainingSeconds: computeRemainingSeconds(timer)
+    remainingSeconds: nowRemaining,
+    completed: completedNow
   });
 }
