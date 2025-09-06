@@ -321,28 +321,47 @@ export default function QuizPage() {
         {/* Grid (no gap, seamless layout always) */}
         <div className="flex items-center justify-center">
           <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
-            {loadingGrid ? (
-              <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
-            ) : (
-              current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
-                <button
-                  key={cell}
-                  onClick={() => !allRevealed && openCell(cell)}
-                  className="aspect-square p-0 m-0 border border-gray-700"
-                >
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={`Section ${section} Cell ${cell+1}`}
-                      className="w-full h-full object-cover block"
-                    />
-                  ) : (
-                    <span className="text-gray-300">{al}/5</span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+  {loadingGrid ? (
+    <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
+  ) : (
+    current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => {
+      const row = Math.floor(cell / 3);
+      const col = cell % 3;
+
+      // default border
+      let borderClasses = "border border-gray-700";
+
+      // if all cells revealed → remove inner edges
+      if (allRevealed) {
+        borderClasses = "";
+        if (row === 0) borderClasses += " border-t";      // keep top border
+        if (row === 1) borderClasses += " border-b";      // keep bottom border
+        if (col === 0) borderClasses += " border-l";      // keep left border
+        if (col === 2) borderClasses += " border-r";      // keep right border
+        borderClasses += " border-gray-700";
+      }
+
+      return (
+        <button
+          key={cell}
+          onClick={() => !allRevealed && openCell(cell)}
+          className={`aspect-square p-0 m-0 ${borderClasses}`}
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={`Section ${section} Cell ${cell+1}`}
+              className="w-full h-full object-cover block"
+            />
+          ) : (
+            <span className="text-gray-300">{al}/5</span>
+          )}
+        </button>
+      );
+    })
+  )}
+</div>
+
         </div>
 
         {/* Section Challenge */}
