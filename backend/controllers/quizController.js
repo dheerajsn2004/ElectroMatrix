@@ -63,7 +63,8 @@ export async function getSections(req, res) {
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map(r => [`${r.section}:${r.cell}`, r]));
 
-  const sections = [1,2,3].map(sec => {
+  // Sections 1–3
+  const sections = [1, 2, 3].map(sec => {
     const cells = Array.from({ length: 6 }, (_, i) => {
       const r = rMap.get(`${sec}:${i}`);
       const solved = !!r?.isCorrect;
@@ -80,7 +81,20 @@ export async function getSections(req, res) {
     return { id: sec, cells };
   });
 
-  res.json({ sections });
+  // ✅ Figure out how many sections are completed (all 6 cells revealed)
+  let unlockedSection = 1;
+  for (let sec = 1; sec <= 3; sec++) {
+    const s = sections.find(x => x.id === sec);
+    const allRevealed = s?.cells.every(c => Boolean(c.imageUrl)) || false;
+    if (allRevealed) {
+      unlockedSection = sec + 1; // next section unlocks
+    } else {
+      break; // stop at first incomplete section
+    }
+  }
+  if (unlockedSection > 3) unlockedSection = 3; // max cap
+
+  res.json({ sections, unlockedSection });
 }
 
 export async function getQuestion(req, res) {
