@@ -318,9 +318,13 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid (tight rectangular) */}
+        {/* Grid (tight rectangular, removes inside edges when all revealed) */}
         <div className="flex items-center justify-center">
-          <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md">
+          <div
+            className={`grid grid-cols-3 grid-rows-2 w-full max-w-md ${
+              allRevealed ? "gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60" : "gap-3 sm:gap-4"
+            }`}
+          >
             {loadingGrid ? (
               <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
             ) : (
@@ -328,19 +332,17 @@ export default function QuizPage() {
                 <button
                   key={cell}
                   onClick={() => !allRevealed && openCell(cell)}
-                  className={`aspect-square border ${
+                  className={`aspect-square ${
                     allRevealed
-                      ? "p-0 m-0"
-                      : "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                      ? "p-0 m-0 border-0"
+                      : "bg-gray-800 border border-gray-700 hover:bg-gray-700 rounded-md"
                   }`}
                 >
                   {imageUrl ? (
                     <img
                       src={imageUrl}
                       alt={`Section ${section} Cell ${cell+1}`}
-                      className={`w-full h-full object-cover ${
-                        allRevealed ? "rounded-none" : "rounded-md"
-                      }`}
+                      className="w-full h-full object-cover block"
                     />
                   ) : (
                     <span className="text-gray-300">{al}/5</span>
