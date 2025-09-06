@@ -76,7 +76,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      // 👇 pass completion state up so parent can unlock next section
+      // if all 3 solved now → parent should unlock immediately
       onSubmit(!!data.completed);
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
@@ -172,6 +172,11 @@ export default function QuizPage() {
       setBonusQs(data.questions || []);
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
+
+      // ✅ If time is over, unlock next section immediately by reloading sections
+      if (data.expired) {
+        loadSections();
+      }
     } catch {
       setBonusLocked(true);
       setBonusQs([]);
@@ -180,7 +185,7 @@ export default function QuizPage() {
     }
   };
 
-  // when section changes or grid updates, check if unlocked for challenge
+  // when section changes or grid updates, check if challenge should show
   useEffect(() => {
     const s = sections.find((x) => x.id === section);
     const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
@@ -391,9 +396,9 @@ export default function QuizPage() {
                   section={section}
                   q={q}
                   onSubmit={(completed) => {
-                    // refresh the section questions/timer
+                    // refresh timer/attempts
                     refreshBonus(section);
-                    // if all 3 solved now → reload sections to unlock next tab immediately
+                    // if solved all 3, unlock right away
                     if (completed) {
                       loadSections();
                     }
