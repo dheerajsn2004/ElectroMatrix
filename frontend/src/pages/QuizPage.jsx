@@ -3,7 +3,30 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
 
-// ---------- Modal (single grid cell question) ----------
+/* --------------------- small helpers --------------------- */
+function shallowEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!shallowEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (typeof a === "object" && typeof b === "object") {
+    const ak = Object.keys(a), bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (const k of ak) {
+      if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+      if (!shallowEqual(a[k], b[k])) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+/* ---------------- Modal (single grid cell question) ---------------- */
 function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, onSubmit, loading }) {
   const [answer, setAnswer] = useState("");
   useEffect(() => { setAnswer(""); }, [open, prompt]);
@@ -55,7 +78,7 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
   );
 }
 
-// ---------- Section meta-question card ----------
+/* ------------- Section meta-question card (stacked) ------------- */
 function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -76,8 +99,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      // if all 3 solved now → parent should unlock immediately
-      onSubmit(!!data.completed);
+      onSubmit(); // refresh timer/attempts from server
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
     } finally {
@@ -119,6 +141,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   );
 }
 
+/* ------------------------------- Page ------------------------------ */
 export default function QuizPage() {
   const navigate = useNavigate();
   const team = useMemo(() => {
@@ -132,7 +155,8 @@ export default function QuizPage() {
   });
   const [unlockedSection, setUnlockedSection] = useState(1);
   const [sections, setSections] = useState([]);
-  const [loadingGrid, setLoadingGrid] = useState(true);
+  const [initialLoaded, setInitialLoaded] = useState(false);
+  const [loadingGrid, setLoadingGrid] = useState(true); // only used for first load
 
   // modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -143,7 +167,7 @@ export default function QuizPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // section challenge state
+  // section challenge state (+ timer)
   const [bonusLocked, setBonusLocked] = useState(true);
   const [bonusQs, setBonusQs] = useState([]);
   const [remaining, setRemaining] = useState(null);
@@ -153,18 +177,34 @@ export default function QuizPage() {
   useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
 
   const loadSections = async () => {
-    setLoadingGrid(true);
+    if (!initialLoaded) setLoadingGrid(true); // show spinner only on very first load
     try {
       const { data } = await api.get("/quiz/sections");
-      setUnlockedSection(data.unlockedSection || 1);
-      if (section > (data.unlockedSection || 1)) setSection(data.unlockedSection || 1);
-      setSections(data.sections || []);
+
+      // clamp active tab to unlockedSection if needed
+      if (section > (data.unlockedSection || 1)) {
+        setSection(data.unlockedSection || 1);
+      }
+
+      // avoid useless re-renders that cause flicker
+      setUnlockedSection((prev) =>
+        prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
+      );
+
+      setSections((prev) => {
+        const next = data.sections || [];
+        return shallowEqual(prev, next) ? prev : next;
+      });
     } finally {
-      setLoadingGrid(false);
+      if (!initialLoaded) {
+        setInitialLoaded(true);
+        setLoadingGrid(false);
+      }
     }
   };
-  useEffect(() => { loadSections(); }, []);
+  useEffect(() => { loadSections(); }, []); // first mount
 
+  // fetch section challenge (questions + timer)
   const refreshBonus = async (sec) => {
     try {
       const { data } = await api.get("/quiz/section-questions", { params: { section: sec } });
@@ -172,20 +212,12 @@ export default function QuizPage() {
       setBonusQs(data.questions || []);
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
-
-      // ✅ If time is over, unlock next section immediately by reloading sections
-      if (data.expired) {
-        loadSections();
-      }
     } catch {
-      setBonusLocked(true);
-      setBonusQs([]);
-      setRemaining(null);
-      setExpired(false);
+      // do not nuke UI on transient errors—keep latest values
     }
   };
 
-  // when section changes or grid updates, check if challenge should show
+  // re-check bonus when grid changes or section switches
   useEffect(() => {
     const s = sections.find((x) => x.id === section);
     const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
@@ -199,7 +231,7 @@ export default function QuizPage() {
     }
   }, [section, sections]);
 
-  // countdown (frontend cosmetic)
+  // cosmetic countdown (server is the source of truth)
   useEffect(() => {
     if (bonusLocked || remaining == null || expired) return;
     const id = setInterval(() => {
@@ -208,13 +240,14 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // resync with server
+  // occasional server resync to avoid drift (no grid reload here → no blink)
   useEffect(() => {
     if (bonusLocked || expired) return;
     const id = setInterval(() => refreshBonus(section), 15000);
     return () => clearInterval(id);
   }, [bonusLocked, expired, section]);
 
+  // open modal for a cell
   const openCell = async (cell) => {
     setCurrentCell(cell);
     setModalOpen(true);
@@ -232,6 +265,7 @@ export default function QuizPage() {
     }
   };
 
+  // submit answer for a cell
   const submitAnswer = async (answer) => {
     if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
     setSubmitting(true);
@@ -242,12 +276,12 @@ export default function QuizPage() {
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
-        await loadSections();
+        await loadSections(); // will not blink after first load
       } else {
         setSolved(false);
         setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
         if (data.attemptsLeft === 0) {
-          await loadSections();
+          await loadSections(); // reveal the image even when exhausted
           setModalOpen(false);
         }
       }
@@ -263,12 +297,13 @@ export default function QuizPage() {
     }
   };
 
+  // current section view
   const current = sections.find((s) => s.id === section) || {
-    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, answered: false, attemptsLeft: 5, imageUrl: "" }))
+    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5 })),
   };
-
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
 
+  // format mm:ss
   const fmt = (sec) => {
     if (sec == null) return "";
     const m = Math.floor(sec / 60);
@@ -276,6 +311,7 @@ export default function QuizPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // switching tabs (respect locking)
   const switchSection = (s) => {
     if (s > unlockedSection) {
       alert("This section is locked. Complete the previous section first.");
@@ -325,20 +361,20 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid (no gap; remove only inner borders when complete) */}
+        {/* Grid (no gap; seamless when fully revealed; no blinking after first load) */}
         <div className="flex items-center justify-center">
           <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
-            {loadingGrid ? (
+            {!initialLoaded ? (
               <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
             ) : (
               current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => {
                 const row = Math.floor(cell / 3);
                 const col = cell % 3;
 
-                // default border
+                // default border (inner edges visible)
                 let borderClasses = "border border-gray-700";
 
-                // if all cells revealed → remove inner edges, keep outer frame
+                // once all tiles are revealed -> remove inner edges but keep outer frame
                 if (allRevealed) {
                   borderClasses = "";
                   if (row === 0) borderClasses += " border-t";
@@ -357,8 +393,9 @@ export default function QuizPage() {
                     {imageUrl ? (
                       <img
                         src={imageUrl}
-                        alt={`Section ${section} Cell ${cell+1}`}
+                        alt={`Section ${section} Cell ${cell + 1}`}
                         className="w-full h-full object-cover block"
+                        draggable={false}
                       />
                     ) : (
                       <span className="text-gray-300">{al}/5</span>
@@ -395,14 +432,7 @@ export default function QuizPage() {
                   key={q.idx}
                   section={section}
                   q={q}
-                  onSubmit={(completed) => {
-                    // refresh timer/attempts
-                    refreshBonus(section);
-                    // if solved all 3, unlock right away
-                    if (completed) {
-                      loadSections();
-                    }
-                  }}
+                  onSubmit={() => refreshBonus(section)}
                   disabledByTime={expired || (remaining !== null && remaining === 0)}
                 />
               ))}
