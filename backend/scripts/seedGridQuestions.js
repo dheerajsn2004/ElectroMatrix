@@ -190,7 +190,7 @@ const data = [
   // ===== LAST SET: Op-amp =====
   {
     prompt:
-      "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
+      "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is: ",
     type: "mcq",
     options: [
       { key: "a", label: "–0.1" },
@@ -202,7 +202,7 @@ const data = [
   },
   {
     prompt:
-      "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
+      "The output of an op-amp integrator for a square wave input is: ",
     type: "mcq",
     options: [
       { key: "a", label: "Square wave" },
@@ -214,7 +214,7 @@ const data = [
   },
   {
     prompt:
-      "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
+      "A Schmitt Trigger is primarily used for: ",
     type: "mcq",
     options: [
       { key: "a", label: "Signal amplification" },
@@ -226,7 +226,7 @@ const data = [
   },
   {
     prompt:
-      "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
+      "A voltage follower has a voltage gain of approximately:",
     type: "mcq",
     options: [
       { key: "a", label: "0" },
@@ -238,7 +238,7 @@ const data = [
   },
   {
     prompt:
-      "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
+      "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be: ",
     type: "mcq",
     options: [
       { key: "a", label: "–0.1 V" },
