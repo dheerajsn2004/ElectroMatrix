@@ -32,6 +32,15 @@ function assetUrl(path) {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/* -------------- helpers for background-sliced grid tiles -------------- */
+function bgPositionForCell(cell) {
+  const col = cell % 3;      // 0..2
+  const row = Math.floor(cell / 3); // 0..1
+  const x = (col / 2) * 100; // 0, 50, 100
+  const y = (row / 1) * 100; // 0, 100
+  return `${x}% ${y}%`;
+}
+
 /* ---------------- Modal (single grid cell question) ---------------- */
 function QuestionModal({
   open,
@@ -199,25 +208,13 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-
-      // If server says completed (all 3 solved), auto-advance
-      if (data.completed) {
-        onSubmit(); // parent refresh handles auto-advance
-      } else {
-        onSubmit(); // refresh timer/attempts
-      }
+      onSubmit();
     } catch (e) {
-      // Only show specific, actionable messages; otherwise suppress the noisy generic one.
       const msg = e?.response?.data?.error;
-      if (msg === "Time over") {
-        setErr("Time over");
-      } else if (msg === "No attempts left") {
-        setErr("No attempts left");
-      } else {
-        // Suppress "Error submitting" and just refresh state to advance UI if needed.
-        setErr("");
-      }
-      onSubmit(); // refresh will unlock/advance if appropriate
+      if (msg === "Time over") setErr("Time over");
+      else if (msg === "No attempts left") setErr("No attempts left");
+      else setErr("");
+      onSubmit();
     } finally {
       setSubmitting(false);
       setAnswer("");
@@ -293,7 +290,6 @@ export default function QuizPage() {
 
   useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
 
-  // Make loadSections return the fetched payload so callers can act on it
   const loadSections = async () => {
     const { data } = await api.get("/quiz/sections");
 
@@ -332,9 +328,7 @@ export default function QuizPage() {
           setSection(loaded.unlockedSection);
         }
       }
-    } catch {
-      // ignore transient errors
-    }
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -408,8 +402,6 @@ export default function QuizPage() {
       }
     } catch (e) {
       const msg = e?.response?.data?.error || "";
-      // Keep the cell modal UX as-is (we still show explicit server errors),
-      // but avoid a noisy generic fallback.
       setErrorMsg(msg);
       if (e?.response?.status === 403 && e?.response?.data?.attemptsLeft === 0) {
         await loadSections();
@@ -425,6 +417,7 @@ export default function QuizPage() {
     compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
+  const composite = assetUrl(current.compositeImageUrl);
 
   const fmt = (sec) => {
     if (sec == null) return "";
@@ -490,7 +483,7 @@ export default function QuizPage() {
                 <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
               ) : allRevealed ? (
                 <img
-                  src={assetUrl(current.compositeImageUrl)}
+                  src={composite}
                   alt={`Section ${section} Composite`}
                   className="col-span-3 row-span-2 w-full h-full object-cover block"
                   draggable={false}
@@ -505,13 +498,15 @@ export default function QuizPage() {
                     className="aspect-square p-0 m-0 border border-gray-700"
                   >
                     {imageUrl ? (
-                      <img
-                        src={assetUrl(imageUrl)}
-                        alt={`Section ${section} Cell ${cell + 1}`}
-                        className="w-full h-full object-cover block"
-                        draggable={false}
-                        loading="eager"
-                        decoding="sync"
+                      // 🔥 show the slice of the composite image
+                      <div
+                        className="w-full h-full"
+                        style={{
+                          backgroundImage: `url('${composite}')`,
+                          backgroundRepeat: "no-repeat",
+                          backgroundSize: "300% 200%",   // 3 cols × 2 rows
+                          backgroundPosition: bgPositionForCell(cell),
+                        }}
                       />
                     ) : (
                       <span className="text-gray-300">{al}/5</span>

@@ -10,10 +10,10 @@ import TeamSectionTimer from "../models/TeamSectionTimer.js";
 
 const MAX_ATTEMPTS = 5;
 
-// ✅ Scoring rules
+// Scoring rules (unchanged from your latest)
 const GRID_POINTS_CORRECT = 2;          // tile/grid question correct
 const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
-const SECTION_POINTS_CORRECT = 5;       // section meta-questions (unchanged)
+const SECTION_POINTS_CORRECT = 5;       // section meta-questions
 
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
@@ -21,7 +21,6 @@ const normalize = (s = "") => String(s).trim().toLowerCase();
 /*                              HELPERS                                */
 /* ------------------------------------------------------------------ */
 
-// A cell is "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
   const docs = await TeamResponse.find(
     { team: teamId, section },
@@ -46,24 +45,22 @@ async function ensureSectionTimer(teamId, section) {
     team: teamId,
     section,
     startedAt: new Date(),
-    durationSec: 20 * 60, // 20 minutes
+    durationSec: 20 * 60,
   });
 }
 
 function computeRemainingSeconds(timerDoc) {
   if (!timerDoc) return null;
-  if (timerDoc.stoppedAt) return null; // null = stopped/completed (finished early OR expired finalized)
+  if (timerDoc.stoppedAt) return null;
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
 
-// Completed if all 3 meta-questions are solved
 async function sectionCompleted(teamId, section) {
   const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
   return solved >= 3;
 }
 
-// Completed OR Timer Expired (or stopped)
 async function sectionCompletedOrExpired(teamId, section) {
   if (await sectionCompleted(teamId, section)) return true;
 
@@ -76,7 +73,6 @@ async function sectionCompletedOrExpired(teamId, section) {
   return remaining === 0;
 }
 
-// Unlock next section when previous is completed OR expired
 async function computeUnlockedSection(teamId) {
   let unlocked = 1;
   if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
@@ -84,31 +80,16 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
-/* ---------------------- FAST INLINE IMAGE PLACEHOLDERS ---------------------- */
-function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-function svgDataURI({ w, h, bg = "#0b0f12", fg = "#a3e635", text = "" }) {
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'>` +
-    `<rect width='100%' height='100%' fill='${bg}'/>` +
-    `<rect x='1' y='1' width='${w - 2}' height='${h - 2}' fill='none' stroke='#374151' stroke-width='2'/>` +
-    `<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' font-size='${Math.floor(
-      Math.min(w, h) / 7
-    )}' fill='${fg}'>${esc(text)}</text>` +
-    `</svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-function tileImageUrl(section, cell) {
-  return svgDataURI({ w: 600, h: 600, text: `S${section}-C${cell + 1}` });
-}
+/* -------------------- IMAGE URLS (composite per section) -------------------- */
+/** If SectionMeta has a compositeImageUrl use it; else fall back to our defaults. */
 async function compositeImageUrl(section) {
   const meta = await SectionMeta.findOne({ section }).lean();
   if (meta?.compositeImageUrl) return meta.compositeImageUrl;
-  return svgDataURI({ w: 1200, h: 800, text: `Section ${section} Composite` });
+  // 👇 Place your images at backend/public/images/section{1|2|3}.png
+  if (section === 1) return "/images/section1.png";
+  if (section === 2) return "/images/section2.png";
+  if (section === 3) return "/images/section3.png";
+  return "/images/section1.png";
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,7 +100,7 @@ function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
   for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [filtered[i], filtered[j]] = [filtered[j], filtered[i]]; // correct swap
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
   }
   return filtered.slice(0, Math.max(0, n));
 }
@@ -187,7 +168,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     chosen = [...chosen, ...topUp];
   }
 
-  // shuffle chosen 6
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
@@ -229,11 +209,13 @@ export async function getSections(req, res) {
       const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
       const reveal = solved || attemptsLeft === 0;
 
+      // NOTE: we still send a truthy imageUrl to denote "revealed".
+      // The frontend will ignore this value and render a background slice of compUrl.
       return {
         cell,
         answered: solved,
         attemptsLeft,
-        imageUrl: reveal ? tileImageUrl(secId, cell) : "",
+        imageUrl: reveal ? "revealed" : "", // flag only
       };
     });
 
@@ -299,7 +281,7 @@ export async function submitAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: tileImageUrl(section, cell)
+      imageUrl: "revealed"
     });
   }
 
@@ -309,7 +291,7 @@ export async function submitAnswer(req, res) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: tileImageUrl(section, cell)
+      imageUrl: "revealed"
     });
   }
 
@@ -332,14 +314,14 @@ export async function submitAnswer(req, res) {
     { new: true, upsert: true }
   );
 
-  // ✅ Apply scoring per new rules
+  // scoring
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: GRID_POINTS_CORRECT } });
   } else if (qDoc.type === "mcq") {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: -GRID_PENALTY_WRONG_MCQ } });
   }
 
-  // if grid fully revealed (solved or exhausted), start timer
+  // reveal logic + timer unlock
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -351,7 +333,7 @@ export async function submitAnswer(req, res) {
   return res.json({
     correct: isCorrect,
     attemptsLeft,
-    imageUrl: revealImage ? tileImageUrl(section, cell) : ""
+    imageUrl: revealImage ? "revealed" : ""
   });
 }
 
@@ -366,7 +348,6 @@ export async function getSectionQuestions(req, res) {
     return res.status(400).json({ error: "Invalid section" });
   }
 
-  // UNLOCK when all tiles are revealed (solved OR exhausted)
   const unlocked = await teamCompletedAllCells(teamId, section);
   if (!unlocked) {
     return res.json({
@@ -380,9 +361,8 @@ export async function getSectionQuestions(req, res) {
 
   const timer = await ensureSectionTimer(teamId, section);
   const remainingSeconds = computeRemainingSeconds(timer);
-  const expired = remainingSeconds === 0; // true when time over
+  const expired = remainingSeconds === 0;
 
-  // If expired and not yet marked as stopped, stop now (finalize)
   if (expired && timer && !timer.stoppedAt) {
     await TeamSectionTimer.findOneAndUpdate(
       { _id: timer._id },
@@ -475,10 +455,8 @@ export async function submitSectionAnswer(req, res) {
   );
 
   if (isCorrect) {
-    // Section challenge scoring remains unchanged
     await Team.findByIdAndUpdate(teamId, { $inc: { points: SECTION_POINTS_CORRECT } });
 
-    // Stop timer if all 3 meta-questions solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
     if (solvedCount >= 3) {
       await TeamSectionTimer.findOneAndUpdate(
