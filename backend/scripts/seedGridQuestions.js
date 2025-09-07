@@ -2,23 +2,44 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import GridQuestion from "../models/GridQuestion.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Always load backend/.env regardless of where the script is run from
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
+
+function requireEnv(key) {
+  const v = process.env[key];
+  if (!v) {
+    console.error(
+      `❌ Missing required env ${key}. Make sure it exists in backend/.env (loaded from ${path.join(
+        __dirname,
+        "..",
+        ".env"
+      )}).`
+    );
+    process.exit(1);
+  }
+  return v;
+}
+
+const MONGO_URI = requireEnv("MONGO_URI");
 
 /**
  * This script seeds (upserts) grid questions into the GridQuestion pool.
  * It is idempotent: we match by exact 'prompt' when upserting.
  *
  * Sets:
- *  - First set (Signals/Systems): 14 Qs (IDs 1..14 below)
- *  - Second set (Verilog): 5 Qs (V1..V5)
- *  - Last set (Op-amp): 5 Qs (O1..O5)
+ *  - First set (Signals/Systems): 14 Qs
+ *  - Second set (Verilog): 5 Qs
+ *  - Last set (Op-amp): 5 Qs
  */
 
 const data = [
-  /* ==================== FIRST SET: Signals/Systems (14) ==================== */
-
-  // 1
+  // ===== FIRST SET =====
   {
     prompt:
       "What is the key difference between an energy signal and a power signal based on the definitions?",
@@ -31,34 +52,15 @@ const data = [
     ],
     correctAnswer: "a",
   },
-
-  // 2
+  { prompt: "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)", type: "text", correctAnswer: "periodic; 0.5" },
+  { prompt: "Determine whether it is periodic and find the fundamental time period. x[n] = cos(2n)", type: "text", correctAnswer: "nonperiodic" },
   {
-    prompt:
-      "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
-    type: "text",
-    correctAnswer: "periodic; 0.5",
-  },
-
-  // 3
-  {
-    prompt: "Determine whether it is periodic and find the fundamental time period. x[n] = cos(2n)",
-    type: "text",
-    correctAnswer: "nonperiodic",
-  },
-
-  // 4
-  {
-    prompt:
-      "Categorize x(t) as energy or power signal and find the energy/time-averaged power for x(t) = { t, 0≤t≤1 ; 2−t, 1≤t≤2 }.",
+    prompt: "Categorize x(t) as energy or power signal and find the energy/time-averaged power for x(t) = { t, 0≤t≤1 ; 2−t, 1≤t≤2 }.",
     type: "text",
     correctAnswer: "energy; 2/3",
   },
-
-  // 5 (with image)
   {
-    prompt:
-      "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+    prompt: "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
     type: "mcq",
     imageUrl: "/images/q5.png",
     options: [
@@ -69,11 +71,8 @@ const data = [
     ],
     correctAnswer: "a",
   },
-
-  // 6 (with image)
   {
-    prompt:
-      "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+    prompt: "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
     type: "mcq",
     imageUrl: "/images/q6.png",
     options: [
@@ -84,8 +83,6 @@ const data = [
     ],
     correctAnswer: "c",
   },
-
-  // 7
   {
     prompt: "How can the ramp function r(t) be derived from the unit step function u(t)?",
     type: "mcq",
@@ -97,11 +94,8 @@ const data = [
     ],
     correctAnswer: "d",
   },
-
-  // 8
   {
-    prompt:
-      "System y[n] = (1/3)(x[n+1]+x[n]+x[n−1]). Which properties hold?",
+    prompt: "System y[n] = (1/3)(x[n+1]+x[n]+x[n−1]). Which properties hold?",
     type: "mcq",
     options: [
       { key: "a", label: "Causal and stable" },
@@ -111,11 +105,8 @@ const data = [
     ],
     correctAnswer: "b",
   },
-
-  // 9
   {
-    prompt:
-      "System y[n] = x[n] + 2. Which properties hold?",
+    prompt: "System y[n] = x[n] + 2. Which properties hold?",
     type: "mcq",
     options: [
       { key: "a", label: "Linear and memoryless" },
@@ -125,11 +116,8 @@ const data = [
     ],
     correctAnswer: "d",
   },
-
-  // 10
   {
-    prompt:
-      "System y[n] = n x[n]. Which properties hold?",
+    prompt: "System y[n] = n x[n]. Which properties hold?",
     type: "mcq",
     options: [
       { key: "a", label: "Memoryless and time-variant" },
@@ -139,11 +127,8 @@ const data = [
     ],
     correctAnswer: "a",
   },
-
-  // 11
   {
-    prompt:
-      "Why is a system with y(t) = x²(t) considered non-invertible?",
+    prompt: "Why is a system with y(t) = x²(t) considered non-invertible?",
     type: "mcq",
     options: [
       { key: "a", label: "Because it is a non-linear system" },
@@ -153,42 +138,17 @@ const data = [
     ],
     correctAnswer: "c",
   },
+  { prompt: "What is the fundamental period N of x[n] = sin((2π/7) n) ?", type: "text", correctAnswer: "7" },
+  { prompt: "For x(t)=3t² + sin(t), the value of its odd component at t=π is", type: "text", correctAnswer: "0" },
+  { prompt: "Total energy of the discrete-time signal x[n] = δ[n−2] is", type: "text", correctAnswer: "1" },
 
-  // 12
-  {
-    prompt:
-      "What is the fundamental period N of x[n] = sin((2π/7) n) ?",
-    type: "text",
-    correctAnswer: "7",
-  },
-
-  // 13
-  {
-    prompt:
-      "For x(t)=3t² + sin(t), the value of its odd component at t=π is",
-    type: "text",
-    correctAnswer: "0",
-  },
-
-  // 14
-  {
-    prompt:
-      "Total energy of the discrete-time signal x[n] = δ[n−2] is",
-    type: "text",
-    correctAnswer: "1",
-  },
-
-  /* ==================== SECOND SET: Verilog (5) ==================== */
-
-  // V1
+  // ===== SECOND SET: Verilog =====
   {
     prompt:
       "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
     type: "text",
     correctAnswer: "1024",
   },
-
-  // V2
   {
     prompt:
       "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
@@ -201,8 +161,6 @@ const data = [
     ],
     correctAnswer: "c",
   },
-
-  // V3
   {
     prompt:
       "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
@@ -215,8 +173,6 @@ const data = [
     ],
     correctAnswer: "c",
   },
-
-  // V4
   {
     prompt:
       "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
@@ -229,18 +185,9 @@ const data = [
     ],
     correctAnswer: "c",
   },
+  { prompt: "The 7-bit Gray code 1011010 is equivalent to the binary value", type: "text", correctAnswer: "1101100" },
 
-  // V5
-  {
-    prompt:
-      "The 7-bit Gray code 1011010 is equivalent to the binary value",
-    type: "text",
-    correctAnswer: "1101100",
-  },
-
-  /* ==================== LAST SET: Op-amp (5) ==================== */
-
-  // O1
+  // ===== LAST SET: Op-amp =====
   {
     prompt:
       "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
@@ -253,8 +200,6 @@ const data = [
     ],
     correctAnswer: "c",
   },
-
-  // O2
   {
     prompt:
       "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
@@ -267,8 +212,6 @@ const data = [
     ],
     correctAnswer: "b",
   },
-
-  // O3
   {
     prompt:
       "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
@@ -281,8 +224,6 @@ const data = [
     ],
     correctAnswer: "b",
   },
-
-  // O4
   {
     prompt:
       "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
@@ -295,8 +236,6 @@ const data = [
     ],
     correctAnswer: "c",
   },
-
-  // O5
   {
     prompt:
       "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
@@ -312,23 +251,25 @@ const data = [
 ];
 
 async function main() {
-  await mongoose.connect(process.env.MONGO_URI);
+  console.log("🔌 Connecting to MongoDB…");
+  await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
 
+  console.log("🌱 Seeding/upserting GridQuestion pool…");
   for (const q of data) {
-    await GridQuestion.findOneAndUpdate(
-      { prompt: q.prompt },
-      q,
-      { new: true, upsert: true }
-    );
+    await GridQuestion.findOneAndUpdate({ prompt: q.prompt }, q, {
+      new: true,
+      upsert: true,
+    });
   }
 
   const total = await GridQuestion.countDocuments();
   console.log("✅ Seeded/Updated GridQuestion pool. Total questions:", total);
 
   await mongoose.disconnect();
+  console.log("🔌 Disconnected");
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error("❌ Seeder failed:", e);
   process.exit(1);
 });

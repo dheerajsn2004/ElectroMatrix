@@ -4,17 +4,31 @@ import mongoose from "mongoose";
 import { connectDB } from "./config/db.js";
 import SectionQuestion from "./models/SectionQuestion.js";
 import SectionMeta from "./models/SectionMeta.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-/**
- * We now seed EXACTLY ONE meta-question per section (idx = 0).
- * Answers are your provided values.
- *
- * Section 1: equivalent resistance (rounded to 1 decimal) => 1.5
- * Section 2: Vx, iA, iB => "54,3,-5.4"  (comma-separated as a single string)
- * Section 3: power supplied by the voltage source (watts) => 0
- */
+// ✅ Always load backend/.env no matter where you run this from
+dotenv.config({ path: path.join(__dirname, ".env") });
+
+function requireEnv(key) {
+  const v = process.env[key];
+  if (!v) {
+    console.error(
+      `❌ Missing required env ${key}. Ensure it exists in backend/.env (loaded from ${path.join(
+        __dirname,
+        ".env"
+      )}).`
+    );
+    process.exit(1);
+  }
+  return v;
+}
+requireEnv("MONGO_URI");
+
+// ONE meta-question per section (idx = 0)
 const sectionQs = [
   {
     section: 1,
@@ -39,7 +53,7 @@ const sectionQs = [
   },
 ];
 
-// Make sure composites point to your real images served by Express
+// Composite images served by Express
 const metas = [
   { section: 1, compositeImageUrl: "/images/section1.png" },
   { section: 2, compositeImageUrl: "/images/section2.png" },
@@ -50,16 +64,12 @@ const metas = [
   try {
     await connectDB(process.env.MONGO_URI);
 
-    // Replace existing to keep it deterministic
-    await Promise.all([
-      SectionQuestion.deleteMany({}),
-      SectionMeta.deleteMany({}),
-    ]);
+    await Promise.all([SectionQuestion.deleteMany({}), SectionMeta.deleteMany({})]);
 
     await SectionQuestion.insertMany(sectionQs);
     await SectionMeta.insertMany(metas);
 
-    console.log("✅ Seeded ONE section question per section and composite image URLs");
+    console.log("✅ Seeded ONE section question per section and composite images");
     await mongoose.disconnect();
   } catch (e) {
     console.error("❌ Seeding failed:", e);
