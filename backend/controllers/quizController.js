@@ -11,9 +11,9 @@ import TeamSectionTimer from "../models/TeamSectionTimer.js";
 const MAX_ATTEMPTS = 5;
 
 // Scoring rules
-const GRID_POINTS_CORRECT = 2;          // tile/grid question correct
+const GRID_POINTS_CORRECT = 2;          // grid tile question correct
 const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
-const SECTION_POINTS_CORRECT = 5;       // section meta-questions
+const SECTION_POINTS_CORRECT = 5;       // section meta-question (single)
 
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
@@ -57,9 +57,10 @@ function computeRemainingSeconds(timerDoc) {
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
 
+// ✅ Completed if the single section question is solved
 async function sectionCompleted(teamId, section) {
   const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
-  return solved >= 3;
+  return solved >= 1;
 }
 
 async function sectionCompletedOrExpired(teamId, section) {
@@ -115,6 +116,7 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (existing.length === 6) return existing;
 
+  // Pools (already seeded into GridQuestion)
   const firstSetPrompts = [
     "What is the key difference between an energy signal and a power signal based on the definitions?",
     "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
@@ -154,10 +156,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     GridQuestion.find({ prompt: { $in: lastSetPrompts } }).lean(),
   ]);
   const wholePool = await GridQuestion.find({}).lean();
-
-  if ((firstSet.length + secondSet.length + lastSet.length + wholePool.length) === 0) {
-    throw new Error("No grid questions available. Seed GridQuestion collection first.");
-  }
 
   const chosenIds = new Set();
   const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
@@ -374,6 +372,7 @@ export async function getSectionQuestions(req, res) {
     );
   }
 
+  // Fetch ONLY idx 0 if present; but keep generic
   const [qs, rs, meta] = await Promise.all([
     SectionQuestion.find({ section }).sort({ idx: 1 }).lean(),
     TeamSectionResponse.find({ team: teamId, section }).lean(),
@@ -407,7 +406,8 @@ export async function submitSectionAnswer(req, res) {
   const idx = Number(req.body.idx);
   const answer = req.body.answer;
 
-  if (![1,2,3].includes(section) || !(idx >= 0 && idx <= 2) || !answer) {
+  // ✅ Only a single question per section now (idx MUST be 0)
+  if (![1,2,3].includes(section) || idx !== 0 || !answer) {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
@@ -461,8 +461,9 @@ export async function submitSectionAnswer(req, res) {
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: SECTION_POINTS_CORRECT } });
 
+    // ✅ Stop timer as soon as the ONLY section question is solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
-    if (solvedCount >= 3) {
+    if (solvedCount >= 1) {
       await TeamSectionTimer.findOneAndUpdate(
         { team: teamId, section },
         { stoppedAt: new Date() }
