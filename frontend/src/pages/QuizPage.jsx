@@ -26,10 +26,10 @@ function shallowEqual(a, b) {
   return false;
 }
 
-// Build absolute URL for images stored on backend (if needed)
+// Recognize absolute and data URIs
 function assetUrl(path) {
   if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
+  if (/^(https?:|data:)/i.test(path)) return path;
   const base = (api.defaults.baseURL || "").replace(/\/api\/?$/, "");
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -101,6 +101,8 @@ function QuestionModal({
                   alt="Question reference"
                   className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
                   draggable={false}
+                  loading="eager"
+                  decoding="sync"
                 />
               </div>
             ) : null}
@@ -455,49 +457,43 @@ export default function QuizPage() {
         {/* Grid / Composite */}
         <div className="flex items-center justify-center">
           <div className="relative w-full max-w-md">
-            {/* Grid container */}
-            <div className={`grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60 ${allRevealed ? "" : ""}`}>
+            <div className="grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
               {!initialLoaded ? (
                 <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
               ) : allRevealed ? (
-                // When all tiles are revealed -> show single composite image
                 <img
                   src={assetUrl(current.compositeImageUrl)}
                   alt={`Section ${section} Composite`}
                   className="col-span-3 row-span-2 w-full h-full object-cover block"
                   draggable={false}
+                  loading="eager"
+                  decoding="sync"
                 />
               ) : (
-                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => {
-                  const row = Math.floor(cell / 3);
-                  const col = cell % 3;
-
-                  // default inner borders visible
-                  let borderClasses = "border border-gray-700";
-
-                  return (
-                    <button
-                      key={cell}
-                      onClick={() => openCell(cell)}
-                      className={`aspect-square p-0 m-0 ${borderClasses}`}
-                    >
-                      {imageUrl ? (
-                        <img
-                          src={assetUrl(imageUrl)}
-                          alt={`Section ${section} Cell ${cell + 1}`}
-                          className="w-full h-full object-cover block"
-                          draggable={false}
-                        />
-                      ) : (
-                        <span className="text-gray-300">{al}/5</span>
-                      )}
-                    </button>
-                  );
-                })
+                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
+                  <button
+                    key={cell}
+                    onClick={() => openCell(cell)}
+                    className="aspect-square p-0 m-0 border border-gray-700"
+                  >
+                    {imageUrl ? (
+                      <img
+                        src={assetUrl(imageUrl)}
+                        alt={`Section ${section} Cell ${cell + 1}`}
+                        className="w-full h-full object-cover block"
+                        draggable={false}
+                        loading="eager"
+                        decoding="sync"
+                      />
+                    ) : (
+                      <span className="text-gray-300">{al}/5</span>
+                    )}
+                  </button>
+                ))
               )}
             </div>
 
-            {/* Outer frame when all revealed (remove inner edges but keep frame) */}
+            {/* Keep an outer frame when showing composite */}
             {allRevealed && (
               <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gray-700/60" />
             )}

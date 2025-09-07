@@ -79,19 +79,39 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
-/* ---------------------- IMAGE PLACEHOLDERS ---------------------- */
-/** Dummy per-tile image; replace with your real tile URLs later */
-function tileImageUrl(section, cell) {
-  // Large-ish square tile; text identifies section & cell (1-based cell display)
-  return `https://placehold.co/600x600?text=S${section}-C${cell + 1}`;
+/* ---------------------- FAST INLINE IMAGE PLACEHOLDERS ---------------------- */
+/** Escape text for embedding into SVG */
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-/** Composite image per section; replace with real composite later (or use SectionMeta if present) */
+/** Make a crisp SVG data URI (no network) */
+function svgDataURI({ w, h, bg = "#0b0f12", fg = "#a3e635", text = "" }) {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'>` +
+    `<rect width='100%' height='100%' fill='${bg}'/>` +
+    `<rect x='1' y='1' width='${w - 2}' height='${h - 2}' fill='none' stroke='#374151' stroke-width='2'/>` +
+    `<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' font-size='${Math.floor(
+      Math.min(w, h) / 7
+    )}' fill='${fg}'>${esc(text)}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** Dummy per-tile image; replace with your real tile URLs later */
+function tileImageUrl(section, cell) {
+  // 600x600 square tile; text identifies section & (1-based) cell
+  return svgDataURI({ w: 600, h: 600, text: `S${section}-C${cell + 1}` });
+}
+
+/** Composite image per section; uses SectionMeta if present, else inline SVG */
 async function compositeImageUrl(section) {
   const meta = await SectionMeta.findOne({ section }).lean();
-  if (meta?.compositeImageUrl) return meta.compositeImageUrl;
-  // Default dummy composite
-  return `https://placehold.co/1200x800?text=Section+${section}+Composite`;
+  if (meta?.compositeImageUrl) return meta.compositeImageUrl; // your real URL if set
+  return svgDataURI({ w: 1200, h: 800, text: `Section ${section} Composite` });
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,12 +132,11 @@ function pickN(arr, n, excludeIds = new Set()) {
 
 /**
  * Ensure per-team assignments for a given section.
- * Requirement: for EACH section, choose:
- *   - 3 questions from the FIRST set (Signals/Systems, 14)
- *   - 2 questions from the SECOND set (Verilog, 5)
- *   - 1 question from the LAST set (Op-amp, 5)
- * Any question from each set may be chosen. No duplicates within a section.
- * If a set is short (unexpected), we fill deficits from remaining sets (no dupes).
+ * Composition per section:
+ *   - 3 questions from FIRST set (Signals/Systems)
+ *   - 2 questions from SECOND set (Verilog)
+ *   - 1 question from LAST set (Op-amp)
+ * No duplicates within a section.
  */
 async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
@@ -217,7 +236,7 @@ export async function getSections(req, res) {
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
   // Build sections with per-tile image logic and composite url
-  const buildSection = async (secId, assns) => {
+  const buildSection = async (secId) => {
     const compUrl = await compositeImageUrl(secId);
 
     const cells = Array.from({ length: 6 }, (_, cell) => {
@@ -231,18 +250,14 @@ export async function getSections(req, res) {
         cell,
         answered: solved,
         attemptsLeft,
-        imageUrl: reveal ? tileImageUrl(secId, cell) : "", // ← dummy per-cell tile
+        imageUrl: reveal ? tileImageUrl(secId, cell) : "", // ← inline SVG; instant render
       };
     });
 
     return { id: secId, cells, compositeImageUrl: compUrl };
   };
 
-  const [s1, s2, s3] = await Promise.all([
-    buildSection(1, a1),
-    buildSection(2, a2),
-    buildSection(3, a3),
-  ]);
+  const [s1, s2, s3] = await Promise.all([buildSection(1), buildSection(2), buildSection(3)]);
 
   const unlockedSection = await computeUnlockedSection(teamId);
   res.json({ sections: [s1, s2, s3], unlockedSection });
@@ -273,7 +288,7 @@ export async function getQuestion(req, res) {
     prompt: qDoc.prompt,
     type: qDoc.type,                 // "mcq" | "text"
     options: qDoc.options || [],     // [{key,label}] for mcq
-    imageUrl: qDoc.imageUrl || "",   // (optional) image embedded in the question body
+    imageUrl: qDoc.imageUrl || "",   // optional image embedded in the question body
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
     solved
   });
@@ -303,7 +318,7 @@ export async function submitAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: tileImageUrl(section, cell) // reveal tile image
+      imageUrl: tileImageUrl(section, cell) // reveal tile image (inline SVG)
     });
   }
 
@@ -314,7 +329,7 @@ export async function submitAnswer(req, res) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: tileImageUrl(section, cell) // reveal tile image
+      imageUrl: tileImageUrl(section, cell) // reveal tile image (inline SVG)
     });
   }
 
