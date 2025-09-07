@@ -25,6 +25,7 @@ function shallowEqual(a, b) {
   }
   return false;
 }
+
 function assetUrl(path) {
   if (!path) return "";
   if (/^(https?:|data:)/i.test(path)) return path;
@@ -32,12 +33,14 @@ function assetUrl(path) {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-/* -------------- helpers for background-sliced grid tiles -------------- */
+/* ---------------- exact 3×2 background slice helpers ---------------- */
+/** For a 3(col) × 2(row) mosaic, each tile shows one sixth of the composite. */
+const SLICE_BG_SIZE = "300% 200%"; // 3 columns × 2 rows
 function bgPositionForCell(cell) {
-  const col = cell % 3;      // 0..2
-  const row = Math.floor(cell / 3); // 0..1
-  const x = (col / 2) * 100; // 0, 50, 100
-  const y = (row / 1) * 100; // 0, 100
+  const col = cell % 3;           // 0,1,2
+  const row = Math.floor(cell / 3); // 0,1
+  const x = col * 50;             // 0%, 50%, 100%
+  const y = row * 100;            // 0%, 100%
   return `${x}% ${y}%`;
 }
 
@@ -495,21 +498,21 @@ export default function QuizPage() {
                   <button
                     key={cell}
                     onClick={() => openCell(cell)}
-                    className="aspect-square p-0 m-0 border border-gray-700"
+                    className="relative aspect-square p-0 m-0 border border-gray-700"
                   >
                     {imageUrl ? (
-                      // 🔥 show the slice of the composite image
+                      // Exact slice: fill the content box (ignores border width/padding)
                       <div
-                        className="w-full h-full"
+                        className="absolute inset-0"
                         style={{
                           backgroundImage: `url('${composite}')`,
                           backgroundRepeat: "no-repeat",
-                          backgroundSize: "300% 200%",   // 3 cols × 2 rows
-                          backgroundPosition: bgPositionForCell(cell),
+                          backgroundSize: SLICE_BG_SIZE,     // 300% 200%
+                          backgroundPosition: bgPositionForCell(cell), // 0/50/100 x 0/100
                         }}
                       />
                     ) : (
-                      <span className="text-gray-300">{al}/5</span>
+                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">{al}/5</span>
                     )}
                   </button>
                 ))
