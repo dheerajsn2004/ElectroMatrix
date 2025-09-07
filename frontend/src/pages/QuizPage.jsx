@@ -95,11 +95,20 @@ function QuestionModal({
           {imageUrl ? (
             <div className="mb-4">
               <img
-                src={imageUrl}
+                src={assetUrl(imageUrl)}               
                 alt="Question reference"
                 className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
                 draggable={false}
                 loading="eager"
+                decoding="sync"
+                onError={(e) => {
+                  // Graceful fallback instead of a broken image icon
+                  e.currentTarget.style.display = "none";
+                  const msg = document.createElement("div");
+                  msg.className = "text-sm text-gray-400";
+                  msg.textContent = "Image unavailable.";
+                  e.currentTarget.parentElement.appendChild(msg);
+                }}
               />
             </div>
           ) : null}
