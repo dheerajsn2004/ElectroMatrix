@@ -1,5 +1,6 @@
 // backend/controllers/quizController.js
-import Question from "../models/Question.js";
+import GridQuestion from "../models/GridQuestion.js";
+import SectionGridAssignment from "../models/SectionGridAssignment.js";
 import TeamResponse from "../models/TeamResponse.js";
 import Team from "../models/Team.js";
 import SectionQuestion from "../models/SectionQuestion.js";
@@ -11,11 +12,9 @@ const MAX_ATTEMPTS = 5;
 const POINTS_PER_CORRECT = 5;
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
-// ---------- helpers ----------
-async function teamSolvedAllCells(teamId, section) {
-  const solvedCount = await TeamResponse.countDocuments({ team: teamId, section, isCorrect: true });
-  return solvedCount >= 6;
-}
+/* ------------------------------------------------------------------ */
+/*                              HELPERS                                */
+/* ------------------------------------------------------------------ */
 
 // A cell is "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
@@ -80,55 +79,128 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
-// ---------- GRID SECTION ----------
+/* ------------------------------------------------------------------ */
+/*                      ASSIGNMENT / GRID UTILITIES                    */
+/* ------------------------------------------------------------------ */
+
+async function ensureAssignmentsForTeamSection(teamId, section) {
+  const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
+  if (existing.length === 6) return existing;
+
+  // pick 6 questions from the pool (shuffle to randomize)
+  const pool = await GridQuestion.find({}).lean();
+  if (pool.length < 6) throw new Error("Not enough grid questions seeded.");
+
+  // Fisher–Yates shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const chosen = pool.slice(0, 6);
+
+  // upsert assignments for cells 0..5
+  const ops = chosen.map((q, idx) =>
+    SectionGridAssignment.findOneAndUpdate(
+      { team: teamId, section, cell: idx },
+      { question: q._id },
+      { new: true, upsert: true }
+    )
+  );
+  return await Promise.all(ops);
+}
+
+function buildPromptWithOptions(qDoc) {
+  if (qDoc.type !== "mcq" || !Array.isArray(qDoc.options)) return qDoc.prompt;
+  const opts = qDoc.options
+    .map((o) => `${o.key.toUpperCase()}) ${o.label}`)
+    .join("  |  ");
+  return `${qDoc.prompt}\n\n${opts}`;
+}
+
+/* ------------------------------------------------------------------ */
+/*                           GRID SECTION API                          */
+/* ------------------------------------------------------------------ */
+
 export async function getSections(req, res) {
   const teamId = req.team._id;
 
-  const questions = await Question.find({}, { section: 1, cell: 1, imageUrl: 1 }).lean();
-  const qMap = new Map(questions.map(q => [`${q.section}:${q.cell}`, q.imageUrl || ""]));
+  // ensure assignments exist per section (creates once per team/section)
+  const [a1, a2, a3] = await Promise.all([
+    ensureAssignmentsForTeamSection(teamId, 1),
+    ensureAssignmentsForTeamSection(teamId, 2),
+    ensureAssignmentsForTeamSection(teamId, 3),
+  ]);
 
+  // helper to map assignments -> {cell, imageUrl}
+  const mapAssignments = async (assns) => {
+    const ids = assns.map((a) => a.question);
+    const qs = await GridQuestion.find({ _id: { $in: ids } }, { imageUrl: 1 }).lean();
+    const qMap = new Map(qs.map((q) => [String(q._id), q]));
+    return assns.map((a) => {
+      const q = qMap.get(String(a.question));
+      return { cell: a.cell, imageUrl: q?.imageUrl || "" };
+    });
+  };
+
+  const [cells1, cells2, cells3] = await Promise.all([
+    mapAssignments(a1),
+    mapAssignments(a2),
+    mapAssignments(a3),
+  ]);
+
+  // overlay attempts/solved to decide reveal
   const responses = await TeamResponse.find({ team: teamId }).lean();
-  const rMap = new Map(responses.map(r => [`${r.section}:${r.cell}`, r]));
+  const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
-  const sections = [1, 2, 3].map(sec => {
-    const cells = Array.from({ length: 6 }, (_, i) => {
-      const r = rMap.get(`${sec}:${i}`);
+  const bakeSection = (secId, baseCells) =>
+    baseCells.map(({ cell, imageUrl }) => {
+      const r = rMap.get(`${secId}:${cell}`);
       const solved = !!r?.isCorrect;
       const attempts = r?.attempts || 0;
       const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
       const shouldShowImage = solved || attemptsLeft === 0;
       return {
-        cell: i,
+        cell,
         answered: solved,
         attemptsLeft,
-        imageUrl: shouldShowImage ? (qMap.get(`${sec}:${i}`) || "") : ""
+        imageUrl: shouldShowImage ? imageUrl : "",
       };
     });
-    return { id: sec, cells };
-  });
+
+  const sections = [
+    { id: 1, cells: bakeSection(1, cells1.sort((a,b)=>a.cell-b.cell)) },
+    { id: 2, cells: bakeSection(2, cells2.sort((a,b)=>a.cell-b.cell)) },
+    { id: 3, cells: bakeSection(3, cells3.sort((a,b)=>a.cell-b.cell)) },
+  ];
 
   const unlockedSection = await computeUnlockedSection(teamId);
   res.json({ sections, unlockedSection });
 }
 
 export async function getQuestion(req, res) {
+  const teamId = req.team._id;
   const section = Number(req.query.section);
   const cell = Number(req.query.cell);
   if (![1,2,3].includes(section) || !(cell >= 0 && cell <= 5)) {
     return res.status(400).json({ error: "Invalid section/cell" });
   }
 
-  const q = await Question.findOne({ section, cell }).lean();
-  if (!q) return res.status(404).json({ error: "Question not found" });
+  // get assignment → question
+  const assign = await SectionGridAssignment.findOne({ team: teamId, section, cell }).lean();
+  if (!assign) return res.status(404).json({ error: "Assignment not found" });
 
-  const r = await TeamResponse.findOne({ team: req.team._id, section, cell }).lean();
+  const qDoc = await GridQuestion.findById(assign.question).lean();
+  if (!qDoc) return res.status(404).json({ error: "Question not found" });
+
+  const r = await TeamResponse.findOne({ team: teamId, section, cell }).lean();
   const attempts = r?.attempts || 0;
   const solved = !!r?.isCorrect;
 
   res.json({
     section,
     cell,
-    prompt: q.prompt,
+    // embed MCQ options so the modal “prints” them without UI changes
+    prompt: buildPromptWithOptions(qDoc),
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
     solved
   });
@@ -144,8 +216,11 @@ export async function submitAnswer(req, res) {
     return res.status(400).json({ error: "Invalid payload" });
   }
 
-  const q = await Question.findOne({ section, cell });
-  if (!q) return res.status(404).json({ error: "Question not found" });
+  const assign = await SectionGridAssignment.findOne({ team: teamId, section, cell }).lean();
+  if (!assign) return res.status(404).json({ error: "Assignment not found" });
+
+  const qDoc = await GridQuestion.findById(assign.question).lean();
+  if (!qDoc) return res.status(404).json({ error: "Question not found" });
 
   let tr = await TeamResponse.findOne({ team: teamId, section, cell });
 
@@ -155,7 +230,7 @@ export async function submitAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: q.imageUrl || ""
+      imageUrl: qDoc.imageUrl || ""
     });
   }
 
@@ -166,13 +241,25 @@ export async function submitAnswer(req, res) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: q.imageUrl || ""
+      imageUrl: qDoc.imageUrl || ""
     });
   }
 
-  const attempts = currentAttempts + 1;
-  const isCorrect = normalize(answer) === normalize(q.answer);
+  // evaluate correctness
+  const user = normalize(answer);
+  let isCorrect = false;
 
+  if (qDoc.type === "mcq") {
+    // accept key (a/b/c/d) OR the full label
+    const match = (qDoc.options || []).find(
+      (o) => normalize(o.key) === user || normalize(o.label) === user
+    );
+    isCorrect = !!match && normalize(qDoc.correctAnswer) === normalize(match.key);
+  } else {
+    isCorrect = user === normalize(qDoc.correctAnswer);
+  }
+
+  const attempts = currentAttempts + 1;
   tr = await TeamResponse.findOneAndUpdate(
     { team: teamId, section, cell },
     { answerGiven: answer, isCorrect, attempts, answeredAt: new Date() },
@@ -195,11 +282,14 @@ export async function submitAnswer(req, res) {
   return res.json({
     correct: isCorrect,
     attemptsLeft,
-    imageUrl: revealImage ? (q.imageUrl || "") : ""
+    imageUrl: revealImage ? (qDoc.imageUrl || "") : ""
   });
 }
 
-// ---------- SECTION CHALLENGE ----------
+/* ------------------------------------------------------------------ */
+/*                        SECTION CHALLENGE API                        */
+/* ------------------------------------------------------------------ */
+
 export async function getSectionQuestions(req, res) {
   const teamId = req.team._id;
   const section = Number(req.query.section);
