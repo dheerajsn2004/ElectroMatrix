@@ -7,6 +7,7 @@ import SectionMeta from "./models/SectionMeta.js";
 
 dotenv.config();
 
+// 3 meta-questions per section
 const sectionQs = [];
 for (let s = 1; s <= 3; s++) {
   for (let i = 0; i < 3; i++) {
@@ -18,25 +19,30 @@ for (let s = 1; s <= 3; s++) {
     });
   }
 }
+
+// point to real composite images served by Express
 const metas = [
-  { section: 1, compositeImageUrl: "https://placehold.co/900x600?text=Section+1+Composite" },
-  { section: 2, compositeImageUrl: "https://placehold.co/900x600?text=Section+2+Composite" },
-  { section: 3, compositeImageUrl: "https://placehold.co/900x600?text=Section+3+Composite" },
+  { section: 1, compositeImageUrl: "/images/section1.png" },
+  { section: 2, compositeImageUrl: "/images/section2.png" },
+  { section: 3, compositeImageUrl: "/images/section3.png" },
 ];
 
 (async () => {
   try {
     await connectDB(process.env.MONGO_URI);
+
     await Promise.all([
       SectionQuestion.deleteMany({}),
       SectionMeta.deleteMany({}),
     ]);
+
     await SectionQuestion.insertMany(sectionQs);
     await SectionMeta.insertMany(metas);
-    console.log("✅ Seeded section questions and composite images");
+
+    console.log("✅ Seeded section questions and composite images (/images/sectionN.png)");
     await mongoose.disconnect();
   } catch (e) {
-    console.error(e);
+    console.error("❌ Seeding failed:", e);
     process.exit(1);
   }
 })();
