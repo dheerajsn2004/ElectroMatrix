@@ -112,66 +112,130 @@ function pickN(arr, n, excludeIds = new Set()) {
   return filtered.slice(0, Math.max(0, n));
 }
 
+// Build the three pools by prompt labels (already seeded in GridQuestion)
+const firstSetPrompts = [
+  "What is the key difference between an energy signal and a power signal based on the definitions?",
+  "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
+  "Determine whether it is periodic and find the fundamental time period. x[n] = cos(2n)",
+  "Categorize x(t) as energy or power signal and find the energy/time-averaged power for x(t) = { t, 0≤t≤1 ; 2−t, 1≤t≤2 }.",
+  "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+  "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+  "How can the ramp function r(t) be derived from the unit step function u(t)?",
+  "System y[n] = (1/3)(x[n+1]+x[n]+x[n−1]). Which properties hold?",
+  "System y[n] = x[n] + 2. Which properties hold?",
+  "System y[n] = n x[n]. Which properties hold?",
+  "Why is a system with y(t) = x²(t) considered non-invertible?",
+  "What is the fundamental period N of x[n] = sin((2π/7) n) ?",
+  "For x(t)=3t² + sin(t), the value of its odd component at t=π is",
+  "Total energy of the discrete-time signal x[n] = δ[n−2] is",
+];
+const secondSetPrompts = [
+  "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
+  "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
+  "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
+  "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
+  "The 7-bit Gray code 1011010 is equivalent to the binary value",
+];
+const lastSetPrompts = [
+  "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
+  "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
+  "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
+  "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
+  "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
+];
+
+/**
+ * Ensure a section has 6 unique assignments for this team,
+ * with the additional guarantee that **no question is reused
+ * by any other section** for the same team.
+ *
+ * If a section already has 6 assignments but any of them collide
+ * with other sections, the conflicting cells are reassigned.
+ */
 async function ensureAssignmentsForTeamSection(teamId, section) {
-  const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
-  if (existing.length === 6) return existing;
+  const [existing, otherSectionAssigns] = await Promise.all([
+    SectionGridAssignment.find({ team: teamId, section }).lean(),
+    SectionGridAssignment.find({ team: teamId, section: { $ne: section } }).lean(),
+  ]);
 
-  // Pools (already seeded into GridQuestion)
-  const firstSetPrompts = [
-    "What is the key difference between an energy signal and a power signal based on the definitions?",
-    "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
-    "Determine whether it is periodic and find the fundamental time period. x[n] = cos(2n)",
-    "Categorize x(t) as energy or power signal and find the energy/time-averaged power for x(t) = { t, 0≤t≤1 ; 2−t, 1≤t≤2 }.",
-    "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
-    "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
-    "How can the ramp function r(t) be derived from the unit step function u(t)?",
-    "System y[n] = (1/3)(x[n+1]+x[n]+x[n−1]). Which properties hold?",
-    "System y[n] = x[n] + 2. Which properties hold?",
-    "System y[n] = n x[n]. Which properties hold?",
-    "Why is a system with y(t) = x²(t) considered non-invertible?",
-    "What is the fundamental period N of x[n] = sin((2π/7) n) ?",
-    "For x(t)=3t² + sin(t), the value of its odd component at t=π is",
-    "Total energy of the discrete-time signal x[n] = δ[n−2] is",
-  ];
+  // Questions already used in other sections for this team
+  const usedInOtherSections = new Set(
+    otherSectionAssigns.map((a) => String(a.question))
+  );
 
-  const secondSetPrompts = [
-    "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
-    "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
-    "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
-    "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
-    "The 7-bit Gray code 1011010 is equivalent to the binary value",
-  ];
+  // If all 6 exist, verify none collide with other sections. Reassign offenders.
+  if (existing.length === 6) {
+    const offenders = existing.filter((a) => usedInOtherSections.has(String(a.question)));
+    if (offenders.length === 0) return existing;
 
-  const lastSetPrompts = [
-    "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
-    "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
-    "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
-    "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
-    "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
-  ];
+    // Build pools & exclude already used in other sections + the safe existing ones
+    const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
+      GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
+      GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
+      GridQuestion.find({ prompt: { $in: lastSetPrompts } }).lean(),
+      GridQuestion.find({}).lean(),
+    ]);
 
-  const [firstSet, secondSet, lastSet] = await Promise.all([
+    const safeExistingIds = new Set(
+      existing
+        .filter((a) => !usedInOtherSections.has(String(a.question)))
+        .map((a) => String(a.question))
+    );
+
+    // master exclude set begins with questions used in other sections and current safe ones
+    const exclude = new Set([...usedInOtherSections, ...safeExistingIds]);
+
+    // We just need as many fresh questions as offenders.length
+    let candidates = pickN(wholePool, offenders.length, exclude);
+    // If not enough, relax slightly (should be rare)
+    if (candidates.length < offenders.length) {
+      candidates = [
+        ...candidates,
+        ...pickN(wholePool, offenders.length - candidates.length, new Set([...safeExistingIds])),
+      ];
+    }
+
+    const updates = offenders.map((cellAssign, idx) => {
+      const replacement = candidates[idx];
+      if (!replacement) return null;
+      return SectionGridAssignment.findOneAndUpdate(
+        { team: teamId, section, cell: cellAssign.cell },
+        { question: replacement._id },
+        { new: true, upsert: true }
+      );
+    }).filter(Boolean);
+
+    return await Promise.all(updates);
+  }
+
+  // We must (re)build assignments to reach 6 cells, excluding other sections' questions
+  const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
     GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: lastSetPrompts } }).lean(),
+    GridQuestion.find({}).lean(),
   ]);
-  const wholePool = await GridQuestion.find({}).lean();
 
-  const chosenIds = new Set();
+  // Start from "used elsewhere" so we never pick duplicates across sections
+  const chosenIds = new Set(usedInOtherSections);
+
   const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
   for (const q of takeFirst) chosenIds.add(String(q._id));
+
   const takeSecond = pickN(secondSet.length ? secondSet : wholePool, 2, chosenIds);
   for (const q of takeSecond) chosenIds.add(String(q._id));
+
   const takeLast = pickN(lastSet.length ? lastSet : wholePool, 1, chosenIds);
   for (const q of takeLast) chosenIds.add(String(q._id));
 
   let chosen = [...takeFirst, ...takeSecond, ...takeLast];
 
   if (chosen.length < 6) {
-    const topUp = pickN(wholePool, 6 - chosen.length, new Set(chosen.map((q) => String(q._id))));
+    const topUp = pickN(wholePool, 6 - chosen.length, chosenIds);
     chosen = [...chosen, ...topUp];
   }
 
+  // Shuffle chosen to randomize cell placement
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
@@ -194,11 +258,10 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 export async function getSections(req, res) {
   const teamId = req.team._id;
 
-  await Promise.all([
-    ensureAssignmentsForTeamSection(teamId, 1),
-    ensureAssignmentsForTeamSection(teamId, 2),
-    ensureAssignmentsForTeamSection(teamId, 3),
-  ]);
+  // 🔒 Ensure sections sequentially (avoid concurrent races causing duplicates)
+  await ensureAssignmentsForTeamSection(teamId, 1);
+  await ensureAssignmentsForTeamSection(teamId, 2);
+  await ensureAssignmentsForTeamSection(teamId, 3);
 
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
