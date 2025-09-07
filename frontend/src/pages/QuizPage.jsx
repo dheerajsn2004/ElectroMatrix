@@ -25,8 +25,6 @@ function shallowEqual(a, b) {
   }
   return false;
 }
-
-// Recognize absolute and data URIs
 function assetUrl(path) {
   if (!path) return "";
   if (/^(https?:|data:)/i.test(path)) return path;
@@ -201,7 +199,16 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      onSubmit();
+
+      // If server says completed (all 3 solved), auto-advance
+      if (data.completed) {
+        const loaded = await loadSections(); // returns server state
+        if (loaded?.unlockedSection && loaded.unlockedSection > section) {
+          setSection(loaded.unlockedSection);
+        }
+      } else {
+        onSubmit(); // refresh timer/attempts
+      }
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
     } finally {
@@ -279,26 +286,30 @@ export default function QuizPage() {
 
   useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
 
+  // Make loadSections return the fetched payload so callers can act on it
   const loadSections = async () => {
-    try {
-      const { data } = await api.get("/quiz/sections");
+    const { data } = await api.get("/quiz/sections");
 
-      if (section > (data.unlockedSection || 1)) {
-        setSection(data.unlockedSection || 1);
-      }
+    // If server unlocked a higher section, update state
+    setUnlockedSection((prev) =>
+      prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
+    );
 
-      setUnlockedSection((prev) =>
-        prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
-      );
-
-      setSections((prev) => {
-        const next = data.sections || [];
-        return shallowEqual(prev, next) ? prev : next;
-      });
-    } finally {
-      if (!initialLoaded) setInitialLoaded(true);
+    // If newly unlocked section is ahead of current, auto-jump
+    if ((data.unlockedSection || 1) > section) {
+      setSection(data.unlockedSection || section);
     }
+
+    setSections((prev) => {
+      const next = data.sections || [];
+      return shallowEqual(prev, next) ? prev : next;
+    });
+
+    if (!initialLoaded) setInitialLoaded(true);
+
+    return data;
   };
+
   useEffect(() => { loadSections(); }, []);
 
   const refreshBonus = async (sec) => {
@@ -308,7 +319,18 @@ export default function QuizPage() {
       setBonusQs(data.questions || []);
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
-    } catch {}
+
+      // If expired OR all 3 solved, reload sections and auto-advance if unlocked
+      const allSolved = (data.questions || []).every((q) => q.solved);
+      if (data.expired || allSolved) {
+        const loaded = await loadSections();
+        if (loaded?.unlockedSection && loaded.unlockedSection > sec) {
+          setSection(loaded.unlockedSection);
+        }
+      }
+    } catch {
+      // ignore transient errors
+    }
   };
 
   useEffect(() => {
@@ -332,9 +354,10 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
+  // Periodic resync; if expired happens, refreshBonus will auto-advance
   useEffect(() => {
     if (bonusLocked || expired) return;
-    const id = setInterval(() => refreshBonus(section), 15000);
+    const id = setInterval(() => refreshBonus(section), 5000); // slightly more frequent for snappy switch
     return () => clearInterval(id);
   }, [bonusLocked, expired, section]);
 

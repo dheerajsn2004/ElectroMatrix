@@ -47,7 +47,7 @@ async function ensureSectionTimer(teamId, section) {
 
 function computeRemainingSeconds(timerDoc) {
   if (!timerDoc) return null;
-  if (timerDoc.stoppedAt) return null; // null = stopped/completed (finished early because solved all 3)
+  if (timerDoc.stoppedAt) return null; // null = stopped/completed (finished early OR expired finalized)
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
@@ -80,15 +80,12 @@ async function computeUnlockedSection(teamId) {
 }
 
 /* ---------------------- FAST INLINE IMAGE PLACEHOLDERS ---------------------- */
-/** Escape text for embedding into SVG */
 function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
-
-/** Make a crisp SVG data URI (no network) */
 function svgDataURI({ w, h, bg = "#0b0f12", fg = "#a3e635", text = "" }) {
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'>` +
@@ -100,17 +97,12 @@ function svgDataURI({ w, h, bg = "#0b0f12", fg = "#a3e635", text = "" }) {
     `</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
-
-/** Dummy per-tile image; replace with your real tile URLs later */
 function tileImageUrl(section, cell) {
-  // 600x600 square tile; text identifies section & (1-based) cell
   return svgDataURI({ w: 600, h: 600, text: `S${section}-C${cell + 1}` });
 }
-
-/** Composite image per section; uses SectionMeta if present, else inline SVG */
 async function compositeImageUrl(section) {
   const meta = await SectionMeta.findOne({ section }).lean();
-  if (meta?.compositeImageUrl) return meta.compositeImageUrl; // your real URL if set
+  if (meta?.compositeImageUrl) return meta.compositeImageUrl;
   return svgDataURI({ w: 1200, h: 800, text: `Section ${section} Composite` });
 }
 
@@ -118,26 +110,15 @@ async function compositeImageUrl(section) {
 /*                  ASSIGNMENT / POOL COMPOSITION LOGIC               */
 /* ------------------------------------------------------------------ */
 
-/**
- * Pick n items from arr without replacement (shuffles first).
- */
 function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
-  for (let i = filtered.length - 1; i > 0; i--) { // Fisher–Yates
+  for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
   }
   return filtered.slice(0, Math.max(0, n));
 }
 
-/**
- * Ensure per-team assignments for a given section.
- * Composition per section:
- *   - 3 questions from FIRST set (Signals/Systems)
- *   - 2 questions from SECOND set (Verilog)
- *   - 1 question from LAST set (Op-amp)
- * No duplicates within a section.
- */
 async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (existing.length === 6) return existing;
@@ -175,7 +156,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
   ];
 
-  // Load sets
   const [firstSet, secondSet, lastSet] = await Promise.all([
     GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
@@ -183,7 +163,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
   ]);
   const wholePool = await GridQuestion.find({}).lean();
 
-  // Choose 3 / 2 / 1 without overlap
   const chosenIds = new Set();
   const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
   for (const q of takeFirst) chosenIds.add(String(q._id));
@@ -194,19 +173,16 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 
   let chosen = [...takeFirst, ...takeSecond, ...takeLast];
 
-  // If somehow fewer than 6, top up from wholePool without duplicates
   if (chosen.length < 6) {
     const topUp = pickN(wholePool, 6 - chosen.length, new Set(chosen.map((q) => String(q._id))));
     chosen = [...chosen, ...topUp];
   }
 
-  // Shuffle final order for cell placement
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+    [chosen[i], chosen[j]] = [chosen[j]], [chosen[i]];
   }
 
-  // Upsert assignments for cells 0..5
   const ops = chosen.slice(0, 6).map((q, idx) =>
     SectionGridAssignment.findOneAndUpdate(
       { team: teamId, section, cell: idx },
@@ -224,18 +200,15 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 export async function getSections(req, res) {
   const teamId = req.team._id;
 
-  // ensure assignments exist per section (creates once per team/section)
-  const [a1, a2, a3] = await Promise.all([
+  await Promise.all([
     ensureAssignmentsForTeamSection(teamId, 1),
     ensureAssignmentsForTeamSection(teamId, 2),
     ensureAssignmentsForTeamSection(teamId, 3),
   ]);
 
-  // Collect responses to know which tiles should reveal images
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
-  // Build sections with per-tile image logic and composite url
   const buildSection = async (secId) => {
     const compUrl = await compositeImageUrl(secId);
 
@@ -250,7 +223,7 @@ export async function getSections(req, res) {
         cell,
         answered: solved,
         attemptsLeft,
-        imageUrl: reveal ? tileImageUrl(secId, cell) : "", // ← inline SVG; instant render
+        imageUrl: reveal ? tileImageUrl(secId, cell) : "",
       };
     });
 
@@ -271,7 +244,6 @@ export async function getQuestion(req, res) {
     return res.status(400).json({ error: "Invalid section/cell" });
   }
 
-  // get assignment → question
   const assign = await SectionGridAssignment.findOne({ team: teamId, section, cell }).lean();
   if (!assign) return res.status(404).json({ error: "Assignment not found" });
 
@@ -286,9 +258,9 @@ export async function getQuestion(req, res) {
     section,
     cell,
     prompt: qDoc.prompt,
-    type: qDoc.type,                 // "mcq" | "text"
-    options: qDoc.options || [],     // [{key,label}] for mcq
-    imageUrl: qDoc.imageUrl || "",   // optional image embedded in the question body
+    type: qDoc.type,
+    options: qDoc.options || [],
+    imageUrl: qDoc.imageUrl || "",
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
     solved
   });
@@ -312,33 +284,29 @@ export async function submitAnswer(req, res) {
 
   let tr = await TeamResponse.findOne({ team: teamId, section, cell });
 
-  // already solved → keep returning image
   if (tr?.isCorrect) {
     return res.json({
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: tileImageUrl(section, cell) // reveal tile image (inline SVG)
+      imageUrl: tileImageUrl(section, cell)
     });
   }
 
   const currentAttempts = tr?.attempts || 0;
 
-  // already exhausted → still return image
   if (currentAttempts >= MAX_ATTEMPTS) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: tileImageUrl(section, cell) // reveal tile image (inline SVG)
+      imageUrl: tileImageUrl(section, cell)
     });
   }
 
-  // evaluate correctness
   const user = normalize(answer);
   let isCorrect = false;
 
   if (qDoc.type === "mcq") {
-    // accept key (a/b/c/d) OR the full label
     const match = (qDoc.options || []).find(
       (o) => normalize(o.key) === user || normalize(o.label) === user
     );
@@ -358,7 +326,6 @@ export async function submitAnswer(req, res) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
   }
 
-  // if grid fully revealed (solved or exhausted), start timer
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -400,6 +367,14 @@ export async function getSectionQuestions(req, res) {
   const timer = await ensureSectionTimer(teamId, section);
   const remainingSeconds = computeRemainingSeconds(timer);
   const expired = remainingSeconds === 0; // true when time over
+
+  // If expired and not yet marked as stopped, stop now (finalize)
+  if (expired && timer && !timer.stoppedAt) {
+    await TeamSectionTimer.findOneAndUpdate(
+      { _id: timer._id },
+      { stoppedAt: new Date() }
+    );
+  }
 
   const [qs, rs, meta] = await Promise.all([
     SectionQuestion.find({ section }).sort({ idx: 1 }).lean(),
@@ -443,6 +418,13 @@ export async function submitSectionAnswer(req, res) {
 
   const remainingSeconds = computeRemainingSeconds(timer);
   if (remainingSeconds === 0) {
+    // time over -> cannot submit; finalize timer and let next section unlock on next sections read
+    if (!timer.stoppedAt) {
+      await TeamSectionTimer.findOneAndUpdate(
+        { _id: timer._id },
+        { stoppedAt: new Date() }
+      );
+    }
     return res.status(403).json({ error: "Time over", remainingSeconds: 0, expired: true });
   }
 
@@ -457,14 +439,16 @@ export async function submitSectionAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - currentAttempts),
-      remainingSeconds
+      remainingSeconds,
+      completed: await sectionCompleted(teamId, section)
     });
   }
   if (currentAttempts >= MAX_ATTEMPTS) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      remainingSeconds
+      remainingSeconds,
+      completed: await sectionCompleted(teamId, section)
     });
   }
 
