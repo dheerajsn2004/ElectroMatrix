@@ -69,110 +69,106 @@ function QuestionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 overflow-y-auto">
-      <div className="min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6">
-        <div
-          className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl"
-          style={{ maxHeight: "85vh" }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-3 border-b border-gray-800 flex items-center justify-between">
-            <h3 className="text-lg sm:text-xl font-semibold">Question</h3>
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-lg border border-gray-600 hover:bg-gray-800 text-sm"
-              disabled={loading}
-            >
-              Close
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div
+        className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl flex flex-col"
+        style={{ maxHeight: "85vh" }}
+      >
+        {/* Header */}
+        <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between">
+          <h3 className="text-lg sm:text-xl font-semibold">Question</h3>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg border border-gray-600 hover:bg-gray-800 text-sm"
+            disabled={loading}
+          >
+            Close
+          </button>
+        </div>
 
-          <div className="px-5 sm:px-6 py-4 overflow-y-auto" style={{ maxHeight: "calc(85vh - 120px)" }}>
-            <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
-              {prompt}
-            </p>
+        {/* Scrollable content */}
+        <div className="flex-1 px-5 sm:px-6 py-4 overflow-y-auto">
+          <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
+            {prompt}
+          </p>
 
-            {imageUrl ? (
-              <div className="mb-4">
-                <img
-                  src={assetUrl(imageUrl)}
-                  alt="Question reference"
-                  className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
-                  draggable={false}
-                  loading="eager"
-                  decoding="sync"
-                />
-              </div>
-            ) : null}
-
-            <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
-              <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
-              {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
-            </div>
-
-            {type === "mcq" ? (
-              <div className="space-y-2">
-                {(options || []).map((o) => (
-                  <label
-                    key={o.key}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
-                      selected === o.key
-                        ? "border-teal-500 bg-teal-500/10"
-                        : "border-gray-700 hover:bg-gray-800"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="mcq"
-                      className="accent-teal-500"
-                      checked={selected === o.key}
-                      onChange={() => setSelected(o.key)}
-                      disabled={disabled || loading}
-                    />
-                    <span className="text-sm sm:text-base">
-                      <span className="text-gray-300 font-semibold mr-2">{o.key.toUpperCase()}.</span>
-                      <span className="text-gray-200">{o.label}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <input
-                value={answerText}
-                onChange={(e) => setAnswerText(e.target.value)}
-                placeholder="Type your answer…"
-                className={`w-full p-3 rounded-lg bg-gray-800 border focus:outline-none focus:ring-2
-                  ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-teal-500"}`}
-                disabled={disabled || loading}
+          {imageUrl ? (
+            <div className="mb-4">
+              <img
+                src={imageUrl}
+                alt="Question reference"
+                className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
+                draggable={false}
+                loading="eager"
               />
-            )}
-
-            {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
-          </div>
-
-          <div className="px-5 sm:px-6 py-4 border-t border-gray-800">
-            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <button
-                onClick={onClose}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
-                disabled={loading}
-              >
-                Close
-              </button>
-              <button
-                onClick={handleSubmit}
-                className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
-                  disabled
-                    ? "bg-gray-700 cursor-not-allowed"
-                    : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
-                }`}
-                disabled={disabled || loading}
-              >
-                {loading ? "Submitting…" : "Submit"}
-              </button>
             </div>
+          ) : null}
+
+          <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
+            <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
+            {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
           </div>
+
+          {type === "mcq" ? (
+            <div className="space-y-2">
+              {(options || []).map((o) => (
+                <label
+                  key={o.key}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                    selected === o.key
+                      ? "border-teal-500 bg-teal-500/10"
+                      : "border-gray-700 hover:bg-gray-800"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mcq"
+                    className="accent-teal-500"
+                    checked={selected === o.key}
+                    onChange={() => setSelected(o.key)}
+                    disabled={disabled || loading}
+                  />
+                  <span className="text-sm sm:text-base">
+                    <span className="text-gray-300 font-semibold mr-2">{o.key.toUpperCase()}.</span>
+                    <span className="text-gray-200">{o.label}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <input
+              value={answerText}
+              onChange={(e) => setAnswerText(e.target.value)}
+              placeholder="Type your answer…"
+              className={`w-full p-3 rounded-lg bg-gray-800 border focus:outline-none focus:ring-2
+                ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-teal-500"}`}
+              disabled={disabled || loading}
+            />
+          )}
+
+          {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
+        </div>
+
+        {/* Footer stays pinned */}
+        <div className="px-5 sm:px-6 py-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3 sm:justify-end">
+          <button
+            onClick={onClose}
+            className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
+            disabled={loading}
+          >
+            Close
+          </button>
+          <button
+            onClick={handleSubmit}
+            className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
+              disabled
+                ? "bg-gray-700 cursor-not-allowed"
+                : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
+            }`}
+            disabled={disabled || loading}
+          >
+            {loading ? "Submitting…" : "Submit"}
+          </button>
         </div>
       </div>
     </div>
