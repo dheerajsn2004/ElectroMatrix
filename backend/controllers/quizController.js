@@ -9,7 +9,12 @@ import SectionMeta from "../models/SectionMeta.js";
 import TeamSectionTimer from "../models/TeamSectionTimer.js";
 
 const MAX_ATTEMPTS = 5;
-const POINTS_PER_CORRECT = 5;
+
+// ✅ Scoring rules
+const GRID_POINTS_CORRECT = 2;          // tile/grid question correct
+const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
+const SECTION_POINTS_CORRECT = 5;       // section meta-questions (unchanged)
+
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
 /* ------------------------------------------------------------------ */
@@ -182,7 +187,7 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     chosen = [...chosen, ...topUp];
   }
 
-  // ✅ correct shuffle
+  // shuffle chosen 6
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
@@ -327,10 +332,14 @@ export async function submitAnswer(req, res) {
     { new: true, upsert: true }
   );
 
+  // ✅ Apply scoring per new rules
   if (isCorrect) {
-    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
+    await Team.findByIdAndUpdate(teamId, { $inc: { points: GRID_POINTS_CORRECT } });
+  } else if (qDoc.type === "mcq") {
+    await Team.findByIdAndUpdate(teamId, { $inc: { points: -GRID_PENALTY_WRONG_MCQ } });
   }
 
+  // if grid fully revealed (solved or exhausted), start timer
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -371,7 +380,7 @@ export async function getSectionQuestions(req, res) {
 
   const timer = await ensureSectionTimer(teamId, section);
   const remainingSeconds = computeRemainingSeconds(timer);
-  const expired = remainingSeconds === 0;
+  const expired = remainingSeconds === 0; // true when time over
 
   // If expired and not yet marked as stopped, stop now (finalize)
   if (expired && timer && !timer.stoppedAt) {
@@ -466,7 +475,8 @@ export async function submitSectionAnswer(req, res) {
   );
 
   if (isCorrect) {
-    await Team.findByIdAndUpdate(teamId, { $inc: { points: POINTS_PER_CORRECT } });
+    // Section challenge scoring remains unchanged
+    await Team.findByIdAndUpdate(teamId, { $inc: { points: SECTION_POINTS_CORRECT } });
 
     // Stop timer if all 3 meta-questions solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
