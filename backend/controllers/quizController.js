@@ -15,7 +15,42 @@ const GRID_POINTS_CORRECT = 2;          // grid tile question correct
 const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
 const SECTION_POINTS_CORRECT = 5;       // section meta-question (single)
 
+// Old helper, keep for MCQ key/label matching
 const normalize = (s = "") => String(s).trim().toLowerCase();
+
+/* -------------------- Robust text answer helpers (NEW) -------------------- */
+// Normalizes user/free-text answers: case-insensitive, trims, unifies separators.
+function normalizeAnswer(answer) {
+  if (answer === null || answer === undefined) return "";
+  return String(answer)
+    .toLowerCase()
+    .replace(/\s+/g, " ")   // collapse multiple spaces
+    .replace(/[,;|]+/g, ",")// unify popular separators to comma
+    .trim();
+}
+
+// Compares user vs correct answer.
+// If correct answer contains commas, treat both sides as unordered sets of parts.
+function compareAnswers(userAns, correctAns) {
+  const u = normalizeAnswer(userAns);
+  const c = normalizeAnswer(correctAns);
+
+  if (c.includes(",")) {
+    const userParts = u.split(",").map(s => s.trim()).filter(Boolean);
+    const correctParts = c.split(",").map(s => s.trim()).filter(Boolean);
+    if (userParts.length !== correctParts.length) return false;
+
+    // unordered exact match on normalized parts
+    const userSet = new Set(userParts);
+    for (const p of correctParts) {
+      if (!userSet.has(p)) return false;
+    }
+    return true;
+  }
+
+  // single token/phrase exact match after normalization
+  return u === c;
+}
 
 /* ------------------------------------------------------------------ */
 /*                              HELPERS                                */
@@ -148,7 +183,8 @@ function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
   for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [filtered[i], filtered[j]] = [filtered[j]], filtered[i];
+    // fixed swap
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
   }
   return filtered.slice(0, Math.max(0, n));
 }
@@ -402,16 +438,17 @@ export async function submitAnswer(req, res) {
     });
   }
 
-  const user = normalize(answer);
+  const userNorm = normalize(answer);
   let isCorrect = false;
 
   if (qDoc.type === "mcq") {
     const match = (qDoc.options || []).find(
-      (o) => normalize(o.key) === user || normalize(o.label) === user
+      (o) => normalize(o.key) === userNorm || normalize(o.label) === userNorm
     );
     isCorrect = !!match && normalize(qDoc.correctAnswer) === normalize(match.key);
   } else {
-    isCorrect = user === normalize(qDoc.correctAnswer);
+    // robust free-text check for grid questions
+    isCorrect = compareAnswers(answer, qDoc.correctAnswer);
   }
 
   const attempts = currentAttempts + 1;
@@ -557,7 +594,8 @@ export async function submitSectionAnswer(req, res) {
   }
 
   const attempts = currentAttempts + 1;
-  const isCorrect = normalize(answer) === normalize(q.answer);
+  // robust free-text comparison for section meta Q
+  const isCorrect = compareAnswers(answer, q.answer);
 
   tr = await TeamSectionResponse.findOneAndUpdate(
     { team: teamId, section, idx },
@@ -577,7 +615,7 @@ export async function submitSectionAnswer(req, res) {
       );
     }
 
-    // NEW: if this was section 3 (last), and now all sections solved → finalize total time
+    // If this was section 3 (last), and now all sections solved → finalize total time
     if (section === 3) {
       await finalizeRunIfDone(teamId);
     }
