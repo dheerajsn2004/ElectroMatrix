@@ -1,4 +1,3 @@
-// frontend/src/pages/QuizPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
@@ -95,20 +94,11 @@ function QuestionModal({
           {imageUrl ? (
             <div className="mb-4">
               <img
-                src={assetUrl(imageUrl)}               
+                src={imageUrl}
                 alt="Question reference"
                 className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
                 draggable={false}
                 loading="eager"
-                decoding="sync"
-                onError={(e) => {
-                  // Graceful fallback instead of a broken image icon
-                  e.currentTarget.style.display = "none";
-                  const msg = document.createElement("div");
-                  msg.className = "text-sm text-gray-400";
-                  msg.textContent = "Image unavailable.";
-                  e.currentTarget.parentElement.appendChild(msg);
-                }}
               />
             </div>
           ) : null}
@@ -319,6 +309,13 @@ export default function QuizPage() {
       setExpired(!!data.expired);
 
       const allSolved = (data.questions || []).every((q) => q.solved);
+
+      // ✅ If Section 3 single question solved, go to Thank You
+      if (allSolved && sec === 3) {
+        navigate("/thank-you");
+        return;
+      }
+
       if (data.expired || allSolved) {
         const loaded = await loadSections();
         if (loaded?.unlockedSection && loaded.unlockedSection > sec) {
