@@ -12,24 +12,23 @@ export default function RootLayout() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0)_40%,rgba(0,0,0,0.55)_100%)] pointer-events-none" />
 
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* top bar (same everywhere) */}
+        {/* top bar */}
         <header className="px-6 sm:px-10 py-4 flex items-center justify-between">
-          {/* left brand: dot • NISB logo • title */}
+          {/* left: NISB logo + Event name */}
           <Link to="/" className="flex items-center gap-3">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.6)]" />
             <img
               src="/images/nisb-logo.png"
-              alt="NISB"
-              className="h-9 sm:h-10 md:h-11 w-auto object-contain select-none"
+              alt="NISB Logo"
+              className="h-10 sm:h-12 md:h-14 w-auto object-contain select-none"
               draggable={false}
             />
-            <span className="text-sm sm:text-base tracking-wider text-gray-300">
+            <span className="text-lg sm:text-xl md:text-2xl font-bold tracking-wide text-teal-300">
               ElectroMatrix
             </span>
           </Link>
 
-          {/* right side: nav */}
-          <nav className="hidden sm:flex items-center gap-4 text-xs text-gray-400">
+          {/* right: nav */}
+          <nav className="hidden sm:flex items-center gap-4 text-sm text-gray-400">
             <Link to="/" className={pathname === "/" ? "text-teal-300" : ""}>
               Home
             </Link>
