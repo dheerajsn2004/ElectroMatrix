@@ -17,7 +17,7 @@ async function teamSolvedAllCells(teamId, section) {
   return solvedCount >= 6;
 }
 
-// Consider a cell "completed" if solved OR attempts exhausted
+// A cell is "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
   const docs = await TeamResponse.find(
     { team: teamId, section },
@@ -59,27 +59,22 @@ async function sectionCompleted(teamId, section) {
   return solved >= 3;
 }
 
-// ✅ NEW: Completed OR Timer Expired (or stopped)
+// Completed OR Timer Expired (or stopped)
 async function sectionCompletedOrExpired(teamId, section) {
-  // Already fully completed by solving all 3
   if (await sectionCompleted(teamId, section)) return true;
 
-  // Check timer status (it is created when grid fully revealed)
   const timer = await TeamSectionTimer.findOne({ team: teamId, section });
-  if (!timer) return false; // grid might not be fully revealed yet
+  if (!timer) return false; // grid may not be fully revealed yet
 
-  // If timer was stopped → treat as completed
   if (timer.stoppedAt) return true;
 
-  // If timer expired → treat as completed for unlocking
   const remaining = computeRemainingSeconds(timer);
   return remaining === 0;
 }
 
-// ✅ NEW: unlock next section when previous is completed OR expired
+// Unlock next section when previous is completed OR expired
 async function computeUnlockedSection(teamId) {
-  // Section 1 always unlocked to start
-  let unlocked = 1;
+  let unlocked = 1;                 // Section 1 always unlocked to start
   if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
   if (await sectionCompletedOrExpired(teamId, 2)) unlocked = 3;
   return unlocked;
@@ -112,9 +107,7 @@ export async function getSections(req, res) {
     return { id: sec, cells };
   });
 
-  // ✅ Unlock based on (completed OR expired), not just completion
   const unlockedSection = await computeUnlockedSection(teamId);
-
   res.json({ sections, unlockedSection });
 }
 
@@ -272,7 +265,7 @@ export async function submitSectionAnswer(req, res) {
 
   const remainingSeconds = computeRemainingSeconds(timer);
   if (remainingSeconds === 0) {
-    // time over -> cannot submit; but this section should unlock next automatically via getSections()
+    // time over -> cannot submit; but this section will unlock next via getSections()
     return res.status(403).json({ error: "Time over", remainingSeconds: 0, expired: true });
   }
 
@@ -320,7 +313,6 @@ export async function submitSectionAnswer(req, res) {
     }
   }
 
-  // Include 'completed' flag so client can unlock immediately when solved all 3
   const nowRemaining = computeRemainingSeconds(timer);
   const completedNow = await sectionCompleted(teamId, section);
 

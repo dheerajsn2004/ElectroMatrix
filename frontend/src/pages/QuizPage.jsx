@@ -156,7 +156,6 @@ export default function QuizPage() {
   const [unlockedSection, setUnlockedSection] = useState(1);
   const [sections, setSections] = useState([]);
   const [initialLoaded, setInitialLoaded] = useState(false);
-  const [loadingGrid, setLoadingGrid] = useState(true); // only used for first load
 
   // modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -177,16 +176,13 @@ export default function QuizPage() {
   useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
 
   const loadSections = async () => {
-    if (!initialLoaded) setLoadingGrid(true); // show spinner only on very first load
     try {
       const { data } = await api.get("/quiz/sections");
 
-      // clamp active tab to unlockedSection if needed
       if (section > (data.unlockedSection || 1)) {
         setSection(data.unlockedSection || 1);
       }
 
-      // avoid useless re-renders that cause flicker
       setUnlockedSection((prev) =>
         prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
       );
@@ -196,10 +192,7 @@ export default function QuizPage() {
         return shallowEqual(prev, next) ? prev : next;
       });
     } finally {
-      if (!initialLoaded) {
-        setInitialLoaded(true);
-        setLoadingGrid(false);
-      }
+      if (!initialLoaded) setInitialLoaded(true);
     }
   };
   useEffect(() => { loadSections(); }, []); // first mount
@@ -213,7 +206,7 @@ export default function QuizPage() {
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
     } catch {
-      // do not nuke UI on transient errors—keep latest values
+      // keep last known values on transient errors
     }
   };
 
@@ -231,7 +224,7 @@ export default function QuizPage() {
     }
   }, [section, sections]);
 
-  // cosmetic countdown (server is the source of truth)
+  // cosmetic countdown (server authoritative)
   useEffect(() => {
     if (bonusLocked || remaining == null || expired) return;
     const id = setInterval(() => {
@@ -240,7 +233,7 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // occasional server resync to avoid drift (no grid reload here → no blink)
+  // light resync to avoid drift (no grid reload → no blink)
   useEffect(() => {
     if (bonusLocked || expired) return;
     const id = setInterval(() => refreshBonus(section), 15000);
@@ -276,7 +269,7 @@ export default function QuizPage() {
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
-        await loadSections(); // will not blink after first load
+        await loadSections(); // avoids flicker after first load
       } else {
         setSolved(false);
         setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
@@ -361,7 +354,7 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid (no gap; seamless when fully revealed; no blinking after first load) */}
+        {/* Grid (no gap; seamless when fully revealed; no blinking) */}
         <div className="flex items-center justify-center">
           <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
             {!initialLoaded ? (

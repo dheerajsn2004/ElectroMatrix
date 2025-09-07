@@ -6,11 +6,20 @@ import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import quizRoutes from "./routes/quizRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
+// serve static images for question prompts
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+app.use("/images", express.static(path.join(__dirname, "public/images")));
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || ["https://electro-matrix.vercel.app"] }));
 app.use(express.json());
