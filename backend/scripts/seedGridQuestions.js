@@ -172,9 +172,9 @@ const data = [
     correctAnswer: "1",
   },
 
-  /* ==================== NEW QUESTIONS FROM YOUR LIST ==================== */
+  /* ==================== PREVIOUS SPECIAL VERILOG QUESTIONS ==================== */
 
-  // N1 - memory array capacity (text)
+  // V1 - memory array capacity (text)
   {
     prompt:
       "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
@@ -182,7 +182,7 @@ const data = [
     correctAnswer: "1024",
   },
 
-  // N2 - continuous assign LHS type (MCQ)
+  // V2 - continuous assign LHS type (MCQ)
   {
     prompt:
       "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
@@ -196,7 +196,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // N3 - fork-join vs begin-end (MCQ)
+  // V3 - fork-join vs begin-end (MCQ)
   {
     prompt:
       "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
@@ -210,7 +210,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // N4 - procedural block runs once (MCQ)
+  // V4 - procedural block runs once (MCQ)
   {
     prompt:
       "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
@@ -224,12 +224,84 @@ const data = [
     correctAnswer: "c",
   },
 
-  // N5 - gray code to binary (text)
+  // V5 - gray code to binary (text)
   {
     prompt:
       "The 7-bit Gray code 1011010 is equivalent to the binary value",
     type: "text",
     correctAnswer: "1101100",
+  },
+
+  /* ==================== NEW OP-AMP QUESTIONS (ALWAYS PICK FROM THESE) ==================== */
+
+  // O1 - inverting amplifier gain (MCQ)
+  {
+    prompt:
+      "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
+    type: "mcq",
+    options: [
+      { key: "a", label: "–0.1" },
+      { key: "b", label: "–1" },
+      { key: "c", label: "–10" },
+      { key: "d", label: "–100" },
+    ],
+    correctAnswer: "c",
+  },
+
+  // O2 - integrator output for square wave (MCQ)
+  {
+    prompt:
+      "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
+    type: "mcq",
+    options: [
+      { key: "a", label: "Square wave" },
+      { key: "b", label: "Triangular wave" },
+      { key: "c", label: "Sine wave" },
+      { key: "d", label: "Sawtooth wave" },
+    ],
+    correctAnswer: "b",
+  },
+
+  // O3 - Schmitt Trigger use (MCQ)
+  {
+    prompt:
+      "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
+    type: "mcq",
+    options: [
+      { key: "a", label: "Signal amplification" },
+      { key: "b", label: "Removing noise from input signals" },
+      { key: "c", label: "Frequency multiplication" },
+      { key: "d", label: "Reducing gain of amplifier" },
+    ],
+    correctAnswer: "b",
+  },
+
+  // O4 - voltage follower gain (MCQ)
+  {
+    prompt:
+      "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
+    type: "mcq",
+    options: [
+      { key: "a", label: "0" },
+      { key: "b", label: "0.5" },
+      { key: "c", label: "1" },
+      { key: "d", label: "Infinity" },
+    ],
+    correctAnswer: "c",
+  },
+
+  // O5 - integrator step response value (MCQ)
+  {
+    prompt:
+      "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
+    type: "mcq",
+    options: [
+      { key: "a", label: "–0.1 V" },
+      { key: "b", label: "–1 V" },
+      { key: "c", label: "–10 V" },
+      { key: "d", label: "–100 V" },
+    ],
+    correctAnswer: "a",
   },
 ];
 

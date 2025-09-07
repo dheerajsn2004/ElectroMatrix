@@ -85,30 +85,26 @@ async function computeUnlockedSection(teamId) {
 
 /**
  * Ensure per-team assignments for a given section.
- * For Section 1 only: randomly include 2 questions from the "new" Verilog set you provided.
- * The rest are filled from the global pool without duplication.
+ * NEW REQUIREMENT: For every cell (all sections), select ONE random question
+ * from the op-amp set provided by the user and assign it (repeats allowed).
+ * If the op-amp set is missing (not seeded), fall back to generic pool.
  */
 async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (existing.length === 6) return existing;
 
-  // full pool
-  const pool = await GridQuestion.find({}).lean();
-  if (pool.length < 6) throw new Error("Not enough grid questions seeded.");
-
-  // Identify your 5 new questions by their exact prompts:
-  const specialPrompts = new Set([
-    "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
-    "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
-    "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
-    "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
-    "The 7-bit Gray code 1011010 is equivalent to the binary value",
+  // Identify the "op-amp set" prompts (the 5 new ones).
+  const opampPrompts = new Set([
+    "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
+    "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
+    "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
+    "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
+    "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
   ]);
 
-  const specials = pool.filter(q => specialPrompts.has(q.prompt));
-  const nonSpecials = pool.filter(q => !specialPrompts.has(q.prompt));
+  // Load only op-amp questions first
+  const opampQs = await GridQuestion.find({ prompt: { $in: Array.from(opampPrompts) } }).lean();
 
-  // helper: in-place Fisher–Yates
   const shuffle = (arr) => {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -117,26 +113,26 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     return arr;
   };
 
-  let chosen = [];
-  if (section === 1 && specials.length >= 2) {
-    // include 2 random specials in Section 1
-    shuffle(specials);
-    const pickSpecial = specials.slice(0, 2);
-    // fill remaining 4 from non-specials
-    shuffle(nonSpecials);
-    const pickRest = nonSpecials.slice(0, Math.max(0, 6 - pickSpecial.length));
-    chosen = [...pickSpecial, ...pickRest];
+  let chosenForCells = [];
+
+  if (opampQs.length > 0) {
+    // For each of the 6 cells, pick any random op-amp question (with replacement)
+    for (let i = 0; i < 6; i++) {
+      const pick = opampQs[Math.floor(Math.random() * opampQs.length)];
+      chosenForCells.push(pick);
+    }
   } else {
-    // generic selection for other sections (or if specials insufficient)
-    shuffle(pool);
-    chosen = pool.slice(0, 6);
+    // Fallback: choose from the general pool (unique 6 if possible)
+    const pool = await GridQuestion.find({}).lean();
+    if (pool.length < 6) throw new Error("Not enough grid questions seeded.");
+    chosenForCells = shuffle(pool).slice(0, 6);
   }
 
-  // randomize cell ordering
-  shuffle(chosen);
+  // Randomize order across cells a bit
+  shuffle(chosenForCells);
 
   // upsert assignments for cells 0..5
-  const ops = chosen.slice(0, 6).map((q, idx) =>
+  const ops = chosenForCells.map((q, idx) =>
     SectionGridAssignment.findOneAndUpdate(
       { team: teamId, section, cell: idx },
       { question: q._id },
