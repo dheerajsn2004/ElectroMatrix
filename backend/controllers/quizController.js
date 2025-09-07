@@ -57,12 +57,13 @@ function computeRemainingSeconds(timerDoc) {
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
 
-// ✅ Completed if the single section question is solved
+// A section is completed when its single meta-question is solved
 async function sectionCompleted(teamId, section) {
   const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
   return solved >= 1;
 }
 
+// Is a section completed OR expired (timer over)?
 async function sectionCompletedOrExpired(teamId, section) {
   if (await sectionCompleted(teamId, section)) return true;
 
@@ -75,11 +76,51 @@ async function sectionCompletedOrExpired(teamId, section) {
   return remaining === 0;
 }
 
+// Unlock next section when previous is completed OR expired
 async function computeUnlockedSection(teamId) {
   let unlocked = 1;
   if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
   if (await sectionCompletedOrExpired(teamId, 2)) unlocked = 3;
   return unlocked;
+}
+
+/* -------------------- Run timing helpers (NEW) -------------------- */
+
+// Ensure runStartedAt is set the first time the team hits the quiz.
+async function ensureRunStarted(teamId) {
+  const t = await Team.findById(teamId).select("runStartedAt").lean();
+  if (!t?.runStartedAt) {
+    await Team.findByIdAndUpdate(teamId, { runStartedAt: new Date() });
+  }
+}
+
+// Have they SOLVED all three section questions?
+async function allSectionsCompleted(teamId) {
+  const [s1, s2, s3] = await Promise.all([
+    sectionCompleted(teamId, 1),
+    sectionCompleted(teamId, 2),
+    sectionCompleted(teamId, 3),
+  ]);
+  return s1 && s2 && s3;
+}
+
+// If all sections are completed and finish not yet recorded, write final time.
+async function finalizeRunIfDone(teamId) {
+  const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
+  if (!team) return;
+
+  if (team.runFinishedAt) return;              // already finalized
+  if (!team.runStartedAt) return;              // no start yet
+
+  const done = await allSectionsCompleted(teamId);
+  if (!done) return;
+
+  const now = new Date();
+  const total = Math.max(0, Math.floor((now - new Date(team.runStartedAt)) / 1000));
+  await Team.findByIdAndUpdate(teamId, {
+    runFinishedAt: now,
+    runTotalTimeSec: total,
+  });
 }
 
 /* -------------------- IMAGE URL HELPERS -------------------- */
@@ -107,12 +148,12 @@ function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
   for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+    [filtered[i], filtered[j]] = [filtered[j]], filtered[i];
   }
   return filtered.slice(0, Math.max(0, n));
 }
 
-// Build the three pools by prompt labels (already seeded in GridQuestion)
+// Prompt pools (kept outside to reuse in both paths)
 const firstSetPrompts = [
   "What is the key difference between an energy signal and a power signal based on the definitions?",
   "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
@@ -129,6 +170,7 @@ const firstSetPrompts = [
   "For x(t)=3t² + sin(t), the value of its odd component at t=π is",
   "Total energy of the discrete-time signal x[n] = δ[n−2] is",
 ];
+
 const secondSetPrompts = [
   "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
   "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
@@ -136,39 +178,32 @@ const secondSetPrompts = [
   "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
   "The 7-bit Gray code 1011010 is equivalent to the binary value",
 ];
+
 const lastSetPrompts = [
-  "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
-  "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
-  "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
-  "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
-  "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
+  "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:",
+  "The output of an op-amp integrator for a square wave input is:",
+  "A Schmitt Trigger is primarily used for:",
+  "A voltage follower has a voltage gain of approximately:",
+  "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:",
 ];
 
-/**
- * Ensure a section has 6 unique assignments for this team,
- * with the additional guarantee that **no question is reused
- * by any other section** for the same team.
- *
- * If a section already has 6 assignments but any of them collide
- * with other sections, the conflicting cells are reassigned.
- */
 async function ensureAssignmentsForTeamSection(teamId, section) {
   const [existing, otherSectionAssigns] = await Promise.all([
     SectionGridAssignment.find({ team: teamId, section }).lean(),
     SectionGridAssignment.find({ team: teamId, section: { $ne: section } }).lean(),
   ]);
 
+  // prevent duplicates across sections
   const usedInOtherSections = new Set(
     otherSectionAssigns.map((a) => String(a.question))
   );
 
-  // If 6 exist, check collisions AND dangling question ids
+  // If 6 exist, verify no duplicates & no dangling questions
   if (existing.length === 6) {
     const questionIds = existing.map((a) => a.question);
     const found = await GridQuestion.find({ _id: { $in: questionIds } }, { _id: 1 }).lean();
     const foundSet = new Set(found.map((d) => String(d._id)));
 
-    // offenders = duplicates with other sections OR missing in DB
     const offenders = existing.filter(
       (a) => usedInOtherSections.has(String(a.question)) || !foundSet.has(String(a.question))
     );
@@ -182,7 +217,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
       GridQuestion.find({}).lean(),
     ]);
 
-    // Safe ones we keep
     const safeExistingIds = new Set(
       existing
         .filter((a) => !usedInOtherSections.has(String(a.question)) && foundSet.has(String(a.question)))
@@ -211,7 +245,8 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 
     return await Promise.all(updates);
   }
-  // We must (re)build assignments to reach 6 cells, excluding other sections' questions
+
+  // Build new 6 with the required composition (3/2/1) and no cross-section duplicates
   const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
     GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
@@ -219,26 +254,23 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     GridQuestion.find({}).lean(),
   ]);
 
-  // Start from "used elsewhere" so we never pick duplicates across sections
   const chosenIds = new Set(usedInOtherSections);
 
-  const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
+  const takeFirst  = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
   for (const q of takeFirst) chosenIds.add(String(q._id));
-
   const takeSecond = pickN(secondSet.length ? secondSet : wholePool, 2, chosenIds);
   for (const q of takeSecond) chosenIds.add(String(q._id));
-
-  const takeLast = pickN(lastSet.length ? lastSet : wholePool, 1, chosenIds);
+  const takeLast   = pickN(lastSet.length ? lastSet : wholePool, 1, chosenIds);
   for (const q of takeLast) chosenIds.add(String(q._id));
 
   let chosen = [...takeFirst, ...takeSecond, ...takeLast];
 
   if (chosen.length < 6) {
-    const topUp = pickN(wholePool, 6 - chosen.length, chosenIds);
+    const topUp = pickN(wholePool, 6 - chosen.length, new Set(chosen.map((q) => String(q._id))));
     chosen = [...chosen, ...topUp];
   }
 
-  // Shuffle chosen to randomize cell placement
+  // shuffle and save
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
@@ -261,10 +293,14 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 export async function getSections(req, res) {
   const teamId = req.team._id;
 
-  // 🔒 Ensure sections sequentially (avoid concurrent races causing duplicates)
-  await ensureAssignmentsForTeamSection(teamId, 1);
-  await ensureAssignmentsForTeamSection(teamId, 2);
-  await ensureAssignmentsForTeamSection(teamId, 3);
+  // NEW: mark run start
+  await ensureRunStarted(teamId);
+
+  await Promise.all([
+    ensureAssignmentsForTeamSection(teamId, 1),
+    ensureAssignmentsForTeamSection(teamId, 2),
+    ensureAssignmentsForTeamSection(teamId, 3),
+  ]);
 
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
@@ -291,8 +327,11 @@ export async function getSections(req, res) {
   };
 
   const [s1, s2, s3] = await Promise.all([buildSection(1), buildSection(2), buildSection(3)]);
-
   const unlockedSection = await computeUnlockedSection(teamId);
+
+  // NEW: if all sections SOLVED, finalize total time
+  await finalizeRunIfDone(teamId);
+
   res.json({ sections: [s1, s2, s3], unlockedSection });
 }
 
@@ -438,7 +477,6 @@ export async function getSectionQuestions(req, res) {
     );
   }
 
-  // Fetch ONLY idx 0 if present; but keep generic
   const [qs, rs, meta] = await Promise.all([
     SectionQuestion.find({ section }).sort({ idx: 1 }).lean(),
     TeamSectionResponse.find({ team: teamId, section }).lean(),
@@ -457,6 +495,9 @@ export async function getSectionQuestions(req, res) {
     };
   });
 
+  // NEW: if after fetching, all sections solved, finalize time.
+  await finalizeRunIfDone(teamId);
+
   res.json({
     locked: false,
     questions,
@@ -472,7 +513,7 @@ export async function submitSectionAnswer(req, res) {
   const idx = Number(req.body.idx);
   const answer = req.body.answer;
 
-  // ✅ Only a single question per section now (idx MUST be 0)
+  // Single question per section (idx MUST be 0)
   if (![1,2,3].includes(section) || idx !== 0 || !answer) {
     return res.status(400).json({ error: "Invalid payload" });
   }
@@ -527,13 +568,18 @@ export async function submitSectionAnswer(req, res) {
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: SECTION_POINTS_CORRECT } });
 
-    // ✅ Stop timer as soon as the ONLY section question is solved
+    // Stop timer as soon as the ONLY section question is solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
     if (solvedCount >= 1) {
       await TeamSectionTimer.findOneAndUpdate(
         { team: teamId, section },
         { stoppedAt: new Date() }
       );
+    }
+
+    // NEW: if this was section 3 (last), and now all sections solved → finalize total time
+    if (section === 3) {
+      await finalizeRunIfDone(teamId);
     }
   }
 
