@@ -1,3 +1,4 @@
+// frontend/src/pages/QuizPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
@@ -94,11 +95,12 @@ function QuestionModal({
           {imageUrl ? (
             <div className="mb-4">
               <img
-                src={imageUrl}
+                src={assetUrl(imageUrl)}   
                 alt="Question reference"
                 className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
                 draggable={false}
                 loading="eager"
+                decoding="sync"
               />
             </div>
           ) : null}
@@ -261,7 +263,7 @@ export default function QuizPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [currentCell, setCurrentCell] = useState(null);
   const [question, setQuestion] = useState("");
-  const [qType, setQType] = useState("text");
+  the [qType, setQType] = useState("text");
   const [qOptions, setQOptions] = useState([]);
   const [qImage, setQImage] = useState("");
   const [attemptsLeft, setAttemptsLeft] = useState(5);
@@ -310,7 +312,7 @@ export default function QuizPage() {
 
       const allSolved = (data.questions || []).every((q) => q.solved);
 
-      // ✅ If Section 3 single question solved, go to Thank You
+      // If Section 3 single question solved, go to Thank You
       if (allSolved && sec === 3) {
         navigate("/thank-you");
         return;
