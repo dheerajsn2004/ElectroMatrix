@@ -6,12 +6,18 @@ import GridQuestion from "../models/GridQuestion.js";
 dotenv.config();
 
 /**
- * IMPORTANT:
- * - This script seeds (upserts) grid questions into the GridQuestion pool.
- * - It's idempotent: we match by exact 'prompt' text when upserting.
+ * This script seeds (upserts) grid questions into the GridQuestion pool.
+ * It is idempotent: we match by exact 'prompt' when upserting.
+ *
+ * Sets:
+ *  - First set (Signals/Systems): 14 Qs (IDs 1..14 below)
+ *  - Second set (Verilog): 5 Qs (V1..V5)
+ *  - Last set (Op-amp): 5 Qs (O1..O5)
  */
 
 const data = [
+  /* ==================== FIRST SET: Signals/Systems (14) ==================== */
+
   // 1
   {
     prompt:
@@ -172,9 +178,9 @@ const data = [
     correctAnswer: "1",
   },
 
-  /* ==================== PREVIOUS SPECIAL VERILOG QUESTIONS ==================== */
+  /* ==================== SECOND SET: Verilog (5) ==================== */
 
-  // V1 - memory array capacity (text)
+  // V1
   {
     prompt:
       "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
@@ -182,7 +188,7 @@ const data = [
     correctAnswer: "1024",
   },
 
-  // V2 - continuous assign LHS type (MCQ)
+  // V2
   {
     prompt:
       "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
@@ -196,7 +202,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // V3 - fork-join vs begin-end (MCQ)
+  // V3
   {
     prompt:
       "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
@@ -210,7 +216,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // V4 - procedural block runs once (MCQ)
+  // V4
   {
     prompt:
       "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
@@ -224,7 +230,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // V5 - gray code to binary (text)
+  // V5
   {
     prompt:
       "The 7-bit Gray code 1011010 is equivalent to the binary value",
@@ -232,9 +238,9 @@ const data = [
     correctAnswer: "1101100",
   },
 
-  /* ==================== NEW OP-AMP QUESTIONS (ALWAYS PICK FROM THESE) ==================== */
+  /* ==================== LAST SET: Op-amp (5) ==================== */
 
-  // O1 - inverting amplifier gain (MCQ)
+  // O1
   {
     prompt:
       "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
@@ -248,7 +254,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // O2 - integrator output for square wave (MCQ)
+  // O2
   {
     prompt:
       "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
@@ -262,7 +268,7 @@ const data = [
     correctAnswer: "b",
   },
 
-  // O3 - Schmitt Trigger use (MCQ)
+  // O3
   {
     prompt:
       "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
@@ -276,7 +282,7 @@ const data = [
     correctAnswer: "b",
   },
 
-  // O4 - voltage follower gain (MCQ)
+  // O4
   {
     prompt:
       "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
@@ -290,7 +296,7 @@ const data = [
     correctAnswer: "c",
   },
 
-  // O5 - integrator step response value (MCQ)
+  // O5
   {
     prompt:
       "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
@@ -308,7 +314,6 @@ const data = [
 async function main() {
   await mongoose.connect(process.env.MONGO_URI);
 
-  // idempotent seed: upsert by exact prompt text
   for (const q of data) {
     await GridQuestion.findOneAndUpdate(
       { prompt: q.prompt },

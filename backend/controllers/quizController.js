@@ -84,55 +84,103 @@ async function computeUnlockedSection(teamId) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Pick n items from arr without replacement (shuffles first).
+ */
+function pickN(arr, n, excludeIds = new Set()) {
+  const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
+  // Fisher–Yates
+  for (let i = filtered.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+  }
+  return filtered.slice(0, Math.max(0, n));
+}
+
+/**
  * Ensure per-team assignments for a given section.
- * NEW REQUIREMENT: For every cell (all sections), select ONE random question
- * from the op-amp set provided by the user and assign it (repeats allowed).
- * If the op-amp set is missing (not seeded), fall back to generic pool.
+ * Requirement: for EACH section, choose:
+ *   - 3 questions from the FIRST set (Signals/Systems, 14)
+ *   - 2 questions from the SECOND set (Verilog, 5)
+ *   - 1 question from the LAST set (Op-amp, 5)
+ * Any question from each set may be chosen. No duplicates within a section.
+ * If a set is short (unexpected), we fill deficits from remaining sets (no dupes).
  */
 async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (existing.length === 6) return existing;
 
-  // Identify the "op-amp set" prompts (the 5 new ones).
-  const opampPrompts = new Set([
+  // Define sets via exact prompts (must match the seeding strings)
+  const firstSetPrompts = [
+    "What is the key difference between an energy signal and a power signal based on the definitions?",
+    "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
+    "Determine whether it is periodic and find the fundamental time period. x[n] = cos(2n)",
+    "Categorize x(t) as energy or power signal and find the energy/time-averaged power for x(t) = { t, 0≤t≤1 ; 2−t, 1≤t≤2 }.",
+    "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+    "Given the triangular pulse x(t) (see image), which expression represents the shown signal?",
+    "How can the ramp function r(t) be derived from the unit step function u(t)?",
+    "System y[n] = (1/3)(x[n+1]+x[n]+x[n−1]). Which properties hold?",
+    "System y[n] = x[n] + 2. Which properties hold?",
+    "System y[n] = n x[n]. Which properties hold?",
+    "Why is a system with y(t) = x²(t) considered non-invertible?",
+    "What is the fundamental period N of x[n] = sin((2π/7) n) ?",
+    "For x(t)=3t² + sin(t), the value of its odd component at t=π is",
+    "Total energy of the discrete-time signal x[n] = δ[n−2] is",
+  ];
+
+  const secondSetPrompts = [
+    "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
+    "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
+    "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
+    "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
+    "The 7-bit Gray code 1011010 is equivalent to the binary value",
+  ];
+
+  const lastSetPrompts = [
     "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:\n a) –0.1\n b) –1\n c) –10\n d) –100",
     "The output of an op-amp integrator for a square wave input is:\n a) Square wave\n b) Triangular wave\n c) Sine wave\n d) Sawtooth wave",
     "A Schmitt Trigger is primarily used for:\n a) Signal amplification\n b) Removing noise from input signals\n c) Frequency multiplication\n d) Reducing gain of amplifier",
     "A voltage follower has a voltage gain of approximately:\n a) 0\n b) 0.5\n c) 1\n d) Infinity",
     "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:\n a) –0.1 V\n b) –1 V\n c) –10 V\n d) –100 V",
+  ];
+
+  // Load sets
+  const [firstSet, secondSet, lastSet] = await Promise.all([
+    GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
+    GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
+    GridQuestion.find({ prompt: { $in: lastSetPrompts } }).lean(),
   ]);
 
-  // Load only op-amp questions first
-  const opampQs = await GridQuestion.find({ prompt: { $in: Array.from(opampPrompts) } }).lean();
+  // Safety check: if any set came up empty (mismatch in prompts), get whole pool
+  const wholePool = await GridQuestion.find({}).lean();
 
-  const shuffle = (arr) => {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  };
+  // Choose 3 / 2 / 1 without overlap
+  const chosenIds = new Set();
 
-  let chosenForCells = [];
+  const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
+  for (const q of takeFirst) chosenIds.add(String(q._id));
 
-  if (opampQs.length > 0) {
-    // For each of the 6 cells, pick any random op-amp question (with replacement)
-    for (let i = 0; i < 6; i++) {
-      const pick = opampQs[Math.floor(Math.random() * opampQs.length)];
-      chosenForCells.push(pick);
-    }
-  } else {
-    // Fallback: choose from the general pool (unique 6 if possible)
-    const pool = await GridQuestion.find({}).lean();
-    if (pool.length < 6) throw new Error("Not enough grid questions seeded.");
-    chosenForCells = shuffle(pool).slice(0, 6);
+  const takeSecond = pickN(secondSet.length ? secondSet : wholePool, 2, chosenIds);
+  for (const q of takeSecond) chosenIds.add(String(q._id));
+
+  const takeLast = pickN(lastSet.length ? lastSet : wholePool, 1, chosenIds);
+  for (const q of takeLast) chosenIds.add(String(q._id));
+
+  let chosen = [...takeFirst, ...takeSecond, ...takeLast];
+
+  // If somehow fewer than 6, top up from wholePool without duplicates
+  if (chosen.length < 6) {
+    const topUp = pickN(wholePool, 6 - chosen.length, new Set(chosen.map((q) => String(q._id))));
+    chosen = [...chosen, ...topUp];
   }
 
-  // Randomize order across cells a bit
-  shuffle(chosenForCells);
+  // Shuffle final order for cell placement
+  for (let i = chosen.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+  }
 
-  // upsert assignments for cells 0..5
-  const ops = chosenForCells.map((q, idx) =>
+  // Upsert assignments for cells 0..5
+  const ops = chosen.slice(0, 6).map((q, idx) =>
     SectionGridAssignment.findOneAndUpdate(
       { team: teamId, section, cell: idx },
       { question: q._id },
@@ -178,24 +226,26 @@ export async function getSections(req, res) {
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
   const bakeSection = (secId, baseCells) =>
-    baseCells.map(({ cell, imageUrl }) => {
-      const r = rMap.get(`${secId}:${cell}`);
-      const solved = !!r?.isCorrect;
-      const attempts = r?.attempts || 0;
-      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
-      const shouldShowImage = solved || attemptsLeft === 0;
-      return {
-        cell,
-        answered: solved,
-        attemptsLeft,
-        imageUrl: shouldShowImage ? imageUrl : "",
-      };
-    });
+    baseCells
+      .sort((a, b) => a.cell - b.cell)
+      .map(({ cell, imageUrl }) => {
+        const r = rMap.get(`${secId}:${cell}`);
+        const solved = !!r?.isCorrect;
+        const attempts = r?.attempts || 0;
+        const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
+        const shouldShowImage = solved || attemptsLeft === 0;
+        return {
+          cell,
+          answered: solved,
+          attemptsLeft,
+          imageUrl: shouldShowImage ? imageUrl : "",
+        };
+      });
 
   const sections = [
-    { id: 1, cells: bakeSection(1, cells1.sort((a,b)=>a.cell-b.cell)) },
-    { id: 2, cells: bakeSection(2, cells2.sort((a,b)=>a.cell-b.cell)) },
-    { id: 3, cells: bakeSection(3, cells3.sort((a,b)=>a.cell-b.cell)) },
+    { id: 1, cells: bakeSection(1, cells1) },
+    { id: 2, cells: bakeSection(2, cells2) },
+    { id: 3, cells: bakeSection(3, cells3) },
   ];
 
   const unlockedSection = await computeUnlockedSection(teamId);
