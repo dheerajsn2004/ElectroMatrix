@@ -63,7 +63,7 @@ async function sectionCompletedOrExpired(teamId, section) {
   if (await sectionCompleted(teamId, section)) return true;
 
   const timer = await TeamSectionTimer.findOne({ team: teamId, section });
-  if (!timer) return false; // grid may not be fully revealed yet
+  if (!timer) return false;
 
   if (timer.stoppedAt) return true;
 
@@ -73,7 +73,7 @@ async function sectionCompletedOrExpired(teamId, section) {
 
 // Unlock next section when previous is completed OR expired
 async function computeUnlockedSection(teamId) {
-  let unlocked = 1;                 // Section 1 always unlocked to start
+  let unlocked = 1;
   if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
   if (await sectionCompletedOrExpired(teamId, 2)) unlocked = 3;
   return unlocked;
@@ -114,7 +114,7 @@ function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
   for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+    [filtered[i], filtered[j]] = [filtered[j], filtered[i]]; // correct swap
   }
   return filtered.slice(0, Math.max(0, n));
 }
@@ -163,6 +163,10 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
   ]);
   const wholePool = await GridQuestion.find({}).lean();
 
+  if ((firstSet.length + secondSet.length + lastSet.length + wholePool.length) === 0) {
+    throw new Error("No grid questions available. Seed GridQuestion collection first.");
+  }
+
   const chosenIds = new Set();
   const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
   for (const q of takeFirst) chosenIds.add(String(q._id));
@@ -178,9 +182,10 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     chosen = [...chosen, ...topUp];
   }
 
+  // ✅ correct shuffle
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [chosen[i], chosen[j]] = [chosen[j]], [chosen[i]];
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
   }
 
   const ops = chosen.slice(0, 6).map((q, idx) =>
@@ -366,7 +371,7 @@ export async function getSectionQuestions(req, res) {
 
   const timer = await ensureSectionTimer(teamId, section);
   const remainingSeconds = computeRemainingSeconds(timer);
-  const expired = remainingSeconds === 0; // true when time over
+  const expired = remainingSeconds === 0;
 
   // If expired and not yet marked as stopped, stop now (finalize)
   if (expired && timer && !timer.stoppedAt) {
@@ -418,7 +423,6 @@ export async function submitSectionAnswer(req, res) {
 
   const remainingSeconds = computeRemainingSeconds(timer);
   if (remainingSeconds === 0) {
-    // time over -> cannot submit; finalize timer and let next section unlock on next sections read
     if (!timer.stoppedAt) {
       await TeamSectionTimer.findOneAndUpdate(
         { _id: timer._id },
