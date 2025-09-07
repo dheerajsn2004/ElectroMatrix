@@ -79,8 +79,23 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
+/* ---------------------- IMAGE PLACEHOLDERS ---------------------- */
+/** Dummy per-tile image; replace with your real tile URLs later */
+function tileImageUrl(section, cell) {
+  // Large-ish square tile; text identifies section & cell (1-based cell display)
+  return `https://placehold.co/600x600?text=S${section}-C${cell + 1}`;
+}
+
+/** Composite image per section; replace with real composite later (or use SectionMeta if present) */
+async function compositeImageUrl(section) {
+  const meta = await SectionMeta.findOne({ section }).lean();
+  if (meta?.compositeImageUrl) return meta.compositeImageUrl;
+  // Default dummy composite
+  return `https://placehold.co/1200x800?text=Section+${section}+Composite`;
+}
+
 /* ------------------------------------------------------------------ */
-/*                      ASSIGNMENT / GRID UTILITIES                    */
+/*                  ASSIGNMENT / POOL COMPOSITION LOGIC               */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -88,8 +103,7 @@ async function computeUnlockedSection(teamId) {
  */
 function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
-  // Fisher–Yates
-  for (let i = filtered.length - 1; i > 0; i--) {
+  for (let i = filtered.length - 1; i > 0; i--) { // Fisher–Yates
     const j = Math.floor(Math.random() * (i + 1));
     [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
   }
@@ -109,7 +123,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
   const existing = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (existing.length === 6) return existing;
 
-  // Define sets via exact prompts (must match the seeding strings)
   const firstSetPrompts = [
     "What is the key difference between an energy signal and a power signal based on the definitions?",
     "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
@@ -149,19 +162,14 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: lastSetPrompts } }).lean(),
   ]);
-
-  // Safety check: if any set came up empty (mismatch in prompts), get whole pool
   const wholePool = await GridQuestion.find({}).lean();
 
   // Choose 3 / 2 / 1 without overlap
   const chosenIds = new Set();
-
   const takeFirst = pickN(firstSet.length ? firstSet : wholePool, 3, chosenIds);
   for (const q of takeFirst) chosenIds.add(String(q._id));
-
   const takeSecond = pickN(secondSet.length ? secondSet : wholePool, 2, chosenIds);
   for (const q of takeSecond) chosenIds.add(String(q._id));
-
   const takeLast = pickN(lastSet.length ? lastSet : wholePool, 1, chosenIds);
   for (const q of takeLast) chosenIds.add(String(q._id));
 
@@ -204,52 +212,40 @@ export async function getSections(req, res) {
     ensureAssignmentsForTeamSection(teamId, 3),
   ]);
 
-  // helper to map assignments -> {cell, imageUrl}
-  const mapAssignments = async (assns) => {
-    const ids = assns.map((a) => a.question);
-    const qs = await GridQuestion.find({ _id: { $in: ids } }, { imageUrl: 1 }).lean();
-    const qMap = new Map(qs.map((q) => [String(q._id), q]));
-    return assns.map((a) => {
-      const q = qMap.get(String(a.question));
-      return { cell: a.cell, imageUrl: q?.imageUrl || "" };
-    });
-  };
-
-  const [cells1, cells2, cells3] = await Promise.all([
-    mapAssignments(a1),
-    mapAssignments(a2),
-    mapAssignments(a3),
-  ]);
-
-  // overlay attempts/solved to decide reveal
+  // Collect responses to know which tiles should reveal images
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
-  const bakeSection = (secId, baseCells) =>
-    baseCells
-      .sort((a, b) => a.cell - b.cell)
-      .map(({ cell, imageUrl }) => {
-        const r = rMap.get(`${secId}:${cell}`);
-        const solved = !!r?.isCorrect;
-        const attempts = r?.attempts || 0;
-        const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
-        const shouldShowImage = solved || attemptsLeft === 0;
-        return {
-          cell,
-          answered: solved,
-          attemptsLeft,
-          imageUrl: shouldShowImage ? imageUrl : "",
-        };
-      });
+  // Build sections with per-tile image logic and composite url
+  const buildSection = async (secId, assns) => {
+    const compUrl = await compositeImageUrl(secId);
 
-  const sections = [
-    { id: 1, cells: bakeSection(1, cells1) },
-    { id: 2, cells: bakeSection(2, cells2) },
-    { id: 3, cells: bakeSection(3, cells3) },
-  ];
+    const cells = Array.from({ length: 6 }, (_, cell) => {
+      const r = rMap.get(`${secId}:${cell}`);
+      const solved = !!r?.isCorrect;
+      const attempts = r?.attempts || 0;
+      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
+      const reveal = solved || attemptsLeft === 0;
+
+      return {
+        cell,
+        answered: solved,
+        attemptsLeft,
+        imageUrl: reveal ? tileImageUrl(secId, cell) : "", // ← dummy per-cell tile
+      };
+    });
+
+    return { id: secId, cells, compositeImageUrl: compUrl };
+  };
+
+  const [s1, s2, s3] = await Promise.all([
+    buildSection(1, a1),
+    buildSection(2, a2),
+    buildSection(3, a3),
+  ]);
 
   const unlockedSection = await computeUnlockedSection(teamId);
-  res.json({ sections, unlockedSection });
+  res.json({ sections: [s1, s2, s3], unlockedSection });
 }
 
 export async function getQuestion(req, res) {
@@ -277,7 +273,7 @@ export async function getQuestion(req, res) {
     prompt: qDoc.prompt,
     type: qDoc.type,                 // "mcq" | "text"
     options: qDoc.options || [],     // [{key,label}] for mcq
-    imageUrl: qDoc.imageUrl || "",   // show inside modal if present
+    imageUrl: qDoc.imageUrl || "",   // (optional) image embedded in the question body
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
     solved
   });
@@ -307,7 +303,7 @@ export async function submitAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: qDoc.imageUrl || ""
+      imageUrl: tileImageUrl(section, cell) // reveal tile image
     });
   }
 
@@ -318,7 +314,7 @@ export async function submitAnswer(req, res) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: qDoc.imageUrl || ""
+      imageUrl: tileImageUrl(section, cell) // reveal tile image
     });
   }
 
@@ -359,7 +355,7 @@ export async function submitAnswer(req, res) {
   return res.json({
     correct: isCorrect,
     attemptsLeft,
-    imageUrl: revealImage ? (qDoc.imageUrl || "") : ""
+    imageUrl: revealImage ? tileImageUrl(section, cell) : ""
   });
 }
 
@@ -411,7 +407,7 @@ export async function getSectionQuestions(req, res) {
   res.json({
     locked: false,
     questions,
-    compositeImageUrl: meta?.compositeImageUrl || "",
+    compositeImageUrl: meta?.compositeImageUrl || await compositeImageUrl(section),
     remainingSeconds,
     expired
   });
@@ -432,7 +428,6 @@ export async function submitSectionAnswer(req, res) {
 
   const remainingSeconds = computeRemainingSeconds(timer);
   if (remainingSeconds === 0) {
-    // time over -> cannot submit; but this section will unlock next via getSections()
     return res.status(403).json({ error: "Time over", remainingSeconds: 0, expired: true });
   }
 

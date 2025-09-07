@@ -26,11 +26,10 @@ function shallowEqual(a, b) {
   return false;
 }
 
-// Build absolute URL for images stored on backend (e.g., /images/q5.png)
+// Build absolute URL for images stored on backend (if needed)
 function assetUrl(path) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  // api.defaults.baseURL ends with /api; strip that
   const base = (api.defaults.baseURL || "").replace(/\/api\/?$/, "");
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -63,7 +62,7 @@ function QuestionModal({
   const handleSubmit = () => {
     if (type === "mcq") {
       if (!selected) return;
-      onSubmit(selected); // submit the key (a/b/c/d); backend also accepts label text
+      onSubmit(selected);
     } else {
       if (!answerText.trim()) return;
       onSubmit(answerText);
@@ -71,18 +70,14 @@ function QuestionModal({
   };
 
   return (
-    // Overlay that can scroll on small screens if content is tall
     <div className="fixed inset-0 z-50 bg-black/70 overflow-y-auto">
-      {/* Use a spacer to vertically center but still allow scroll */}
       <div className="min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6">
-        {/* Modal */}
         <div
           className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl"
           style={{ maxHeight: "85vh" }}
           role="dialog"
           aria-modal="true"
         >
-          {/* Header */}
           <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-3 border-b border-gray-800 flex items-center justify-between">
             <h3 className="text-lg sm:text-xl font-semibold">Question</h3>
             <button
@@ -94,14 +89,11 @@ function QuestionModal({
             </button>
           </div>
 
-          {/* Scrollable content area */}
           <div className="px-5 sm:px-6 py-4 overflow-y-auto" style={{ maxHeight: "calc(85vh - 120px)" }}>
-            {/* prompt */}
             <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
               {prompt}
             </p>
 
-            {/* image (if present) */}
             {imageUrl ? (
               <div className="mb-4">
                 <img
@@ -113,13 +105,11 @@ function QuestionModal({
               </div>
             ) : null}
 
-            {/* attempts / status */}
             <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
               <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
               {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
             </div>
 
-            {/* input area */}
             {type === "mcq" ? (
               <div className="space-y-2">
                 {(options || []).map((o) => (
@@ -160,7 +150,6 @@ function QuestionModal({
             {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
           </div>
 
-          {/* Footer actions */}
           <div className="px-5 sm:px-6 py-4 border-t border-gray-800">
             <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
               <button
@@ -184,7 +173,6 @@ function QuestionModal({
             </div>
           </div>
         </div>
-        {/* /Modal */}
       </div>
     </div>
   );
@@ -211,7 +199,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         q.attemptsLeft = data.attemptsLeft;
         setErr(`Incorrect. Attempts left: ${data.attemptsLeft}`);
       }
-      onSubmit(); // refresh timer/attempts from server
+      onSubmit();
     } catch (e) {
       setErr(e?.response?.data?.error || "Error submitting");
     } finally {
@@ -287,7 +275,6 @@ export default function QuizPage() {
   const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
-  // persist active section
   useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
 
   const loadSections = async () => {
@@ -310,9 +297,8 @@ export default function QuizPage() {
       if (!initialLoaded) setInitialLoaded(true);
     }
   };
-  useEffect(() => { loadSections(); }, []); // first mount
+  useEffect(() => { loadSections(); }, []);
 
-  // fetch section challenge (questions + timer)
   const refreshBonus = async (sec) => {
     try {
       const { data } = await api.get("/quiz/section-questions", { params: { section: sec } });
@@ -320,12 +306,9 @@ export default function QuizPage() {
       setBonusQs(data.questions || []);
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
-    } catch {
-      // keep last known values on transient errors
-    }
+    } catch {}
   };
 
-  // re-check bonus when grid changes or section switches
   useEffect(() => {
     const s = sections.find((x) => x.id === section);
     const allRevealed = s?.cells?.every((c) => Boolean(c.imageUrl)) || false;
@@ -339,7 +322,6 @@ export default function QuizPage() {
     }
   }, [section, sections]);
 
-  // cosmetic countdown (server authoritative)
   useEffect(() => {
     if (bonusLocked || remaining == null || expired) return;
     const id = setInterval(() => {
@@ -348,14 +330,12 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // light resync to avoid drift (no grid reload → no blink)
   useEffect(() => {
     if (bonusLocked || expired) return;
     const id = setInterval(() => refreshBonus(section), 15000);
     return () => clearInterval(id);
   }, [bonusLocked, expired, section]);
 
-  // open modal for a cell
   const openCell = async (cell) => {
     setCurrentCell(cell);
     setModalOpen(true);
@@ -379,7 +359,6 @@ export default function QuizPage() {
     }
   };
 
-  // submit answer for a cell
   const submitAnswer = async (answer) => {
     if (!answer?.toString().trim()) { setErrorMsg("Please enter an answer."); return; }
     setSubmitting(true);
@@ -390,12 +369,12 @@ export default function QuizPage() {
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
-        await loadSections(); // avoids flicker after first load
+        await loadSections();
       } else {
         setSolved(false);
         setErrorMsg(`Incorrect. Attempts left: ${data.attemptsLeft}`);
         if (data.attemptsLeft === 0) {
-          await loadSections(); // reveal the image even when exhausted
+          await loadSections();
           setModalOpen(false);
         }
       }
@@ -411,13 +390,12 @@ export default function QuizPage() {
     }
   };
 
-  // current section view
   const current = sections.find((s) => s.id === section) || {
     cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5 })),
+    compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
 
-  // format mm:ss
   const fmt = (sec) => {
     if (sec == null) return "";
     const m = Math.floor(sec / 60);
@@ -425,7 +403,6 @@ export default function QuizPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // switching tabs (respect locking)
   const switchSection = (s) => {
     if (s > unlockedSection) {
       alert("This section is locked. Complete the previous section first.");
@@ -475,48 +452,54 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid */}
+        {/* Grid / Composite */}
         <div className="flex items-center justify-center">
-          <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
-            {!initialLoaded ? (
-              <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
-            ) : (
-              current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => {
-                const row = Math.floor(cell / 3);
-                const col = cell % 3;
+          <div className="relative w-full max-w-md">
+            {/* Grid container */}
+            <div className={`grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60 ${allRevealed ? "" : ""}`}>
+              {!initialLoaded ? (
+                <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
+              ) : allRevealed ? (
+                // When all tiles are revealed -> show single composite image
+                <img
+                  src={assetUrl(current.compositeImageUrl)}
+                  alt={`Section ${section} Composite`}
+                  className="col-span-3 row-span-2 w-full h-full object-cover block"
+                  draggable={false}
+                />
+              ) : (
+                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => {
+                  const row = Math.floor(cell / 3);
+                  const col = cell % 3;
 
-                // default border (inner edges visible)
-                let borderClasses = "border border-gray-700";
+                  // default inner borders visible
+                  let borderClasses = "border border-gray-700";
 
-                // once all tiles are revealed -> remove inner edges but keep outer frame
-                if (allRevealed) {
-                  borderClasses = "";
-                  if (row === 0) borderClasses += " border-t";
-                  if (row === 1) borderClasses += " border-b";
-                  if (col === 0) borderClasses += " border-l";
-                  if (col === 2) borderClasses += " border-r";
-                  borderClasses += " border-gray-700";
-                }
+                  return (
+                    <button
+                      key={cell}
+                      onClick={() => openCell(cell)}
+                      className={`aspect-square p-0 m-0 ${borderClasses}`}
+                    >
+                      {imageUrl ? (
+                        <img
+                          src={assetUrl(imageUrl)}
+                          alt={`Section ${section} Cell ${cell + 1}`}
+                          className="w-full h-full object-cover block"
+                          draggable={false}
+                        />
+                      ) : (
+                        <span className="text-gray-300">{al}/5</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
 
-                return (
-                  <button
-                    key={cell}
-                    onClick={() => !allRevealed && openCell(cell)}
-                    className={`aspect-square p-0 m-0 ${borderClasses}`}
-                  >
-                    {imageUrl ? (
-                      <img
-                        src={imageUrl}
-                        alt={`Section ${section} Cell ${cell + 1}`}
-                        className="w-full h-full object-cover block"
-                        draggable={false}
-                      />
-                    ) : (
-                      <span className="text-gray-300">{al}/5</span>
-                    )}
-                  </button>
-                );
-              })
+            {/* Outer frame when all revealed (remove inner edges but keep frame) */}
+            {allRevealed && (
+              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gray-700/60" />
             )}
           </div>
         </div>
