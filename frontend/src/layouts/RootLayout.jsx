@@ -14,49 +14,38 @@ export default function RootLayout() {
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* top bar (same everywhere) */}
         <header className="px-6 sm:px-10 py-4 flex items-center justify-between">
-          {/* left brand */}
-          <Link to="/" className="flex items-center gap-2">
+          {/* left brand: dot • NISB logo • title */}
+          <Link to="/" className="flex items-center gap-3">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.6)]" />
-            <span className="text-sm tracking-wider text-gray-300">ElectroMatrix</span>
+            <img
+              src="/images/nisb-logo.png"
+              alt="NISB"
+              className="h-9 sm:h-10 md:h-11 w-auto object-contain select-none"
+              draggable={false}
+            />
+            <span className="text-sm sm:text-base tracking-wider text-gray-300">
+              ElectroMatrix
+            </span>
           </Link>
 
-          {/* right side: nav + NISB logo */}
-          <div className="flex items-center gap-6">
-            <nav className="hidden sm:flex items-center gap-4 text-xs text-gray-400">
-              <Link
-                to="/"
-                className={pathname === "/" ? "text-teal-300" : ""}
-              >
-                Home
-              </Link>
-              <Link
-                to="/login"
-                className={pathname.startsWith("/login") ? "text-teal-300" : ""}
-              >
-                Login
-              </Link>
-              <Link
-                to="/quiz"
-                className={pathname.startsWith("/quiz") ? "text-teal-300" : ""}
-              >
-                Quiz
-              </Link>
-            </nav>
-
-            {/* NISB logo (public/images/nisb-logo.png) */}
-            <a
-              href="https://nisb.in"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center"
+          {/* right side: nav */}
+          <nav className="hidden sm:flex items-center gap-4 text-xs text-gray-400">
+            <Link to="/" className={pathname === "/" ? "text-teal-300" : ""}>
+              Home
+            </Link>
+            <Link
+              to="/login"
+              className={pathname.startsWith("/login") ? "text-teal-300" : ""}
             >
-              <img
-                src="/images/nisb-logo.png"
-                alt="NISB Logo"
-                className="h-8 w-auto object-contain"
-              />
-            </a>
-          </div>
+              Login
+            </Link>
+            <Link
+              to="/quiz"
+              className={pathname.startsWith("/quiz") ? "text-teal-300" : ""}
+            >
+              Quiz
+            </Link>
+          </nav>
         </header>
 
         {/* page body */}
