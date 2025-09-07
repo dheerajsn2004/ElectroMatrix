@@ -33,7 +33,7 @@ export default function RootLayout() {
 
         {/* footer */}
         <footer className="px-6 sm:px-10 py-6 text-center text-xs text-gray-500">
-          © {new Date().getFullYear()} ElectroMatrix · IEEE
+          © {new Date().getFullYear()} ElectroMatrix · NISB
         </footer>
       </div>
     </main>
