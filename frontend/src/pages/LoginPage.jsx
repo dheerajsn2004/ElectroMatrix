@@ -21,7 +21,7 @@ export default function LoginPage() {
   };
 
   return (
-    <section className="h-screen page-shell flex items-center justify-center">
+    <section className="page-shell flex items-center justify-center">
       <div className="w-full max-w-md card flex flex-col items-center">
         {/* Centered title */}
         <h1 className="text-2xl font-bold text-teal-400 mb-6 text-center">

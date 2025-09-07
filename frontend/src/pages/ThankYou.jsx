@@ -5,7 +5,7 @@ export default function ThankYou() {
   const navigate = useNavigate();
 
   return (
-    <section className="h-screen page-shell text-center">
+    <section className="page-shell text-center">
       <div className="mx-auto max-w-4xl">
         {/* Icon */}
         <div className="mb-6 flex justify-center">
