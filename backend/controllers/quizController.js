@@ -158,17 +158,23 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     SectionGridAssignment.find({ team: teamId, section: { $ne: section } }).lean(),
   ]);
 
-  // Questions already used in other sections for this team
   const usedInOtherSections = new Set(
     otherSectionAssigns.map((a) => String(a.question))
   );
 
-  // If all 6 exist, verify none collide with other sections. Reassign offenders.
+  // If 6 exist, check collisions AND dangling question ids
   if (existing.length === 6) {
-    const offenders = existing.filter((a) => usedInOtherSections.has(String(a.question)));
+    const questionIds = existing.map((a) => a.question);
+    const found = await GridQuestion.find({ _id: { $in: questionIds } }, { _id: 1 }).lean();
+    const foundSet = new Set(found.map((d) => String(d._id)));
+
+    // offenders = duplicates with other sections OR missing in DB
+    const offenders = existing.filter(
+      (a) => usedInOtherSections.has(String(a.question)) || !foundSet.has(String(a.question))
+    );
     if (offenders.length === 0) return existing;
 
-    // Build pools & exclude already used in other sections + the safe existing ones
+    // Build pools
     const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
       GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
       GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
@@ -176,18 +182,16 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
       GridQuestion.find({}).lean(),
     ]);
 
+    // Safe ones we keep
     const safeExistingIds = new Set(
       existing
-        .filter((a) => !usedInOtherSections.has(String(a.question)))
+        .filter((a) => !usedInOtherSections.has(String(a.question)) && foundSet.has(String(a.question)))
         .map((a) => String(a.question))
     );
 
-    // master exclude set begins with questions used in other sections and current safe ones
     const exclude = new Set([...usedInOtherSections, ...safeExistingIds]);
 
-    // We just need as many fresh questions as offenders.length
     let candidates = pickN(wholePool, offenders.length, exclude);
-    // If not enough, relax slightly (should be rare)
     if (candidates.length < offenders.length) {
       candidates = [
         ...candidates,
@@ -207,7 +211,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 
     return await Promise.all(updates);
   }
-
   // We must (re)build assignments to reach 6 cells, excluding other sections' questions
   const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
     GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),

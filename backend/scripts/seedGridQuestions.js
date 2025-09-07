@@ -1,43 +1,31 @@
 // backend/scripts/seedGridQuestions.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import GridQuestion from "../models/GridQuestion.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import GridQuestion from "../models/GridQuestion.js";
+import SectionGridAssignment from "../models/SectionGridAssignment.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Always load backend/.env regardless of where the script is run from
+// Always load backend/.env regardless of where we are run from
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
 function requireEnv(key) {
   const v = process.env[key];
   if (!v) {
-    console.error(
-      `❌ Missing required env ${key}. Make sure it exists in backend/.env (loaded from ${path.join(
-        __dirname,
-        "..",
-        ".env"
-      )}).`
-    );
+    console.error(`❌ Missing required env ${key}. Expected in ${path.join(__dirname, "..", ".env")}`);
     process.exit(1);
   }
   return v;
 }
-
 const MONGO_URI = requireEnv("MONGO_URI");
 
 /**
- * This script seeds (upserts) grid questions into the GridQuestion pool.
- * It is idempotent: we match by exact 'prompt' when upserting.
- *
- * Sets:
- *  - First set (Signals/Systems): 14 Qs
- *  - Second set (Verilog): 5 Qs
- *  - Last set (Op-amp): 5 Qs
+ * Clean dataset with MCQs having options ONLY in 'options' array,
+ * NOT duplicated in 'prompt'.
  */
-
 const data = [
   // ===== FIRST SET =====
   {
@@ -189,8 +177,7 @@ const data = [
 
   // ===== LAST SET: Op-amp =====
   {
-    prompt:
-      "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is: ",
+    prompt: "In an inverting amplifier with Rf =100kΩ, Rin =10kΩ, the voltage gain is:",
     type: "mcq",
     options: [
       { key: "a", label: "–0.1" },
@@ -201,8 +188,7 @@ const data = [
     correctAnswer: "c",
   },
   {
-    prompt:
-      "The output of an op-amp integrator for a square wave input is: ",
+    prompt: "The output of an op-amp integrator for a square wave input is:",
     type: "mcq",
     options: [
       { key: "a", label: "Square wave" },
@@ -213,8 +199,7 @@ const data = [
     correctAnswer: "b",
   },
   {
-    prompt:
-      "A Schmitt Trigger is primarily used for: ",
+    prompt: "A Schmitt Trigger is primarily used for:",
     type: "mcq",
     options: [
       { key: "a", label: "Signal amplification" },
@@ -225,8 +210,7 @@ const data = [
     correctAnswer: "b",
   },
   {
-    prompt:
-      "A voltage follower has a voltage gain of approximately:",
+    prompt: "A voltage follower has a voltage gain of approximately:",
     type: "mcq",
     options: [
       { key: "a", label: "0" },
@@ -237,8 +221,7 @@ const data = [
     correctAnswer: "c",
   },
   {
-    prompt:
-      "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be: ",
+    prompt: "An op-amp integrator has R=100kΩ and C=0.1μF. If the input is a 1 V DC step, the output after 1 ms will be:",
     type: "mcq",
     options: [
       { key: "a", label: "–0.1 V" },
@@ -254,16 +237,15 @@ async function main() {
   console.log("🔌 Connecting to MongoDB…");
   await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 10000 });
 
-  console.log("🌱 Seeding/upserting GridQuestion pool…");
-  for (const q of data) {
-    await GridQuestion.findOneAndUpdate({ prompt: q.prompt }, q, {
-      new: true,
-      upsert: true,
-    });
-  }
+  console.log("🧹 Clearing old GridQuestion and SectionGridAssignment collections…");
+  await SectionGridAssignment.deleteMany({});
+  await GridQuestion.deleteMany({});
+
+  console.log("🌱 Inserting clean GridQuestion dataset…");
+  await GridQuestion.insertMany(data);
 
   const total = await GridQuestion.countDocuments();
-  console.log("✅ Seeded/Updated GridQuestion pool. Total questions:", total);
+  console.log("✅ Seeded GridQuestion pool. Total questions:", total);
 
   await mongoose.disconnect();
   console.log("🔌 Disconnected");
