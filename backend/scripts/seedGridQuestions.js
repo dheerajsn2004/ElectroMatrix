@@ -5,6 +5,12 @@ import GridQuestion from "../models/GridQuestion.js";
 
 dotenv.config();
 
+/**
+ * IMPORTANT:
+ * - This script seeds (upserts) grid questions into the GridQuestion pool.
+ * - It's idempotent: we match by exact 'prompt' text when upserting.
+ */
+
 const data = [
   // 1
   {
@@ -165,15 +171,72 @@ const data = [
     type: "text",
     correctAnswer: "1",
   },
-];
 
-function norm(s) {
-  return String(s || "").trim().toLowerCase();
-}
+  /* ==================== NEW QUESTIONS FROM YOUR LIST ==================== */
+
+  // N1 - memory array capacity (text)
+  {
+    prompt:
+      "The declaration  \nreg [7:0] my_memory [0:127];  \ndescribes a memory array. What is the total storage capacity of this memory in bits?",
+    type: "text",
+    correctAnswer: "1024",
+  },
+
+  // N2 - continuous assign LHS type (MCQ)
+  {
+    prompt:
+      "A reg can be assigned a value inside an initial or always block. Which Verilog data type must be used for a signal on the left-hand side of a continuous assign statement?",
+    type: "mcq",
+    options: [
+      { key: "a", label: "integer" },
+      { key: "b", label: "reg" },
+      { key: "c", label: "wire" },
+      { key: "d", label: "time" },
+    ],
+    correctAnswer: "c",
+  },
+
+  // N3 - fork-join vs begin-end (MCQ)
+  {
+    prompt:
+      "What is the primary functional difference between the fork-join block and the begin-end block in Verilog?",
+    type: "mcq",
+    options: [
+      { key: "a", label: "fork-join executes statements sequentially, while begin-end executes them in parallel." },
+      { key: "b", label: "fork-join can contain delays, while begin-end cannot." },
+      { key: "c", label: "fork-join executes statements in parallel, while begin-end executes them sequentially." },
+      { key: "d", label: "fork-join is used for functions, while begin-end is used for tasks." },
+    ],
+    correctAnswer: "c",
+  },
+
+  // N4 - procedural block runs once (MCQ)
+  {
+    prompt:
+      "Which Verilog procedural block is intended for statements that should execute only once at the beginning of a simulation?",
+    type: "mcq",
+    options: [
+      { key: "a", label: "always" },
+      { key: "b", label: "function" },
+      { key: "c", label: "initial" },
+      { key: "d", label: "fork" },
+    ],
+    correctAnswer: "c",
+  },
+
+  // N5 - gray code to binary (text)
+  {
+    prompt:
+      "The 7-bit Gray code 1011010 is equivalent to the binary value",
+    type: "text",
+    correctAnswer: "1101100",
+  },
+];
 
 async function main() {
   await mongoose.connect(process.env.MONGO_URI);
-  // idempotent seed: upsert by normalized prompt
+
+  // idempotent seed: upsert by exact prompt text
   for (const q of data) {
     await GridQuestion.findOneAndUpdate(
       { prompt: q.prompt },
@@ -181,7 +244,10 @@ async function main() {
       { new: true, upsert: true }
     );
   }
-  console.log("✅ Seeded grid question pool:", await GridQuestion.countDocuments());
+
+  const total = await GridQuestion.countDocuments();
+  console.log("✅ Seeded/Updated GridQuestion pool. Total questions:", total);
+
   await mongoose.disconnect();
 }
 
