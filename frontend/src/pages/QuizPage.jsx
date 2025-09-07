@@ -260,16 +260,18 @@ export default function QuizPage() {
   const [initialLoaded, setInitialLoaded] = useState(false);
 
   // modal state
-  const [modalOpen, setModalOpen] = useState(false);
-  const [currentCell, setCurrentCell] = useState(null);
-  const [question, setQuestion] = useState("");
-  the [qType, setQType] = useState("text");
-  const [qOptions, setQOptions] = useState([]);
-  const [qImage, setQImage] = useState("");
-  const [attemptsLeft, setAttemptsLeft] = useState(5);
-  const [solved, setSolved] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+ // modal state
+const [modalOpen, setModalOpen] = useState(false);
+const [currentCell, setCurrentCell] = useState(null);
+const [question, setQuestion] = useState("");
+const [qType, setQType] = useState("text");   // ✅ fixed
+const [qOptions, setQOptions] = useState([]);
+const [qImage, setQImage] = useState("");
+const [attemptsLeft, setAttemptsLeft] = useState(5);
+const [solved, setSolved] = useState(false);
+const [submitting, setSubmitting] = useState(false);
+const [errorMsg, setErrorMsg] = useState("");
+
 
   // section challenge state (+ timer)
   const [bonusLocked, setBonusLocked] = useState(true);
