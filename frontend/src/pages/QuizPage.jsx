@@ -33,17 +33,6 @@ function assetUrl(path) {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-/* ---------------- exact 3×2 background slice helpers ---------------- */
-/** For a 3(col) × 2(row) mosaic, each tile shows one sixth of the composite. */
-const SLICE_BG_SIZE = "300% 200%"; // 3 columns × 2 rows
-function bgPositionForCell(cell) {
-  const col = cell % 3;           // 0,1,2
-  const row = Math.floor(cell / 3); // 0,1
-  const x = col * 50;             // 0%, 50%, 100%
-  const y = row * 100;            // 0%, 100%
-  return `${x}% ${y}%`;
-}
-
 /* ---------------- Modal (single grid cell question) ---------------- */
 function QuestionModal({
   open,
@@ -420,7 +409,6 @@ export default function QuizPage() {
     compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
-  const composite = assetUrl(current.compositeImageUrl);
 
   const fmt = (sec) => {
     if (sec == null) return "";
@@ -486,7 +474,7 @@ export default function QuizPage() {
                 <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
               ) : allRevealed ? (
                 <img
-                  src={composite}
+                  src={assetUrl(current.compositeImageUrl)}
                   alt={`Section ${section} Composite`}
                   className="col-span-3 row-span-2 w-full h-full object-cover block"
                   draggable={false}
@@ -501,15 +489,13 @@ export default function QuizPage() {
                     className="relative aspect-square p-0 m-0 border border-gray-700"
                   >
                     {imageUrl ? (
-                      // Exact slice: fill the content box (ignores border width/padding)
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          backgroundImage: `url('${composite}')`,
-                          backgroundRepeat: "no-repeat",
-                          backgroundSize: SLICE_BG_SIZE,     // 300% 200%
-                          backgroundPosition: bgPositionForCell(cell), // 0/50/100 x 0/100
-                        }}
+                      <img
+                        src={assetUrl(imageUrl)}
+                        alt={`S${section} C${cell + 1}`}
+                        className="absolute inset-0 w-full h-full object-cover block"
+                        draggable={false}
+                        loading="eager"
+                        decoding="sync"
                       />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center text-gray-300">{al}/5</span>
@@ -519,7 +505,6 @@ export default function QuizPage() {
               )}
             </div>
 
-            {/* Keep an outer frame when showing composite */}
             {allRevealed && (
               <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gray-700/60" />
             )}

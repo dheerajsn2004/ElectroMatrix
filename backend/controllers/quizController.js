@@ -10,7 +10,7 @@ import TeamSectionTimer from "../models/TeamSectionTimer.js";
 
 const MAX_ATTEMPTS = 5;
 
-// Scoring rules (unchanged from your latest)
+// Scoring rules
 const GRID_POINTS_CORRECT = 2;          // tile/grid question correct
 const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
 const SECTION_POINTS_CORRECT = 5;       // section meta-questions
@@ -21,6 +21,7 @@ const normalize = (s = "") => String(s).trim().toLowerCase();
 /*                              HELPERS                                */
 /* ------------------------------------------------------------------ */
 
+// A cell is "completed" if solved OR attempts exhausted
 async function teamCompletedAllCells(teamId, section) {
   const docs = await TeamResponse.find(
     { team: teamId, section },
@@ -80,16 +81,21 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
-/* -------------------- IMAGE URLS (composite per section) -------------------- */
-/** If SectionMeta has a compositeImageUrl use it; else fall back to our defaults. */
+/* -------------------- IMAGE URL HELPERS -------------------- */
+// Full composite per section — prefer DB value; fallback to defaults
 async function compositeImageUrl(section) {
   const meta = await SectionMeta.findOne({ section }).lean();
   if (meta?.compositeImageUrl) return meta.compositeImageUrl;
-  // 👇 Place your images at backend/public/images/section{1|2|3}.png
   if (section === 1) return "/images/section1.png";
   if (section === 2) return "/images/section2.png";
   if (section === 3) return "/images/section3.png";
   return "/images/section1.png";
+}
+
+// Tile image for a given section/cell (cell is 0..5 → file suffix 1..6)
+function tileImageUrl(section, cell) {
+  const idx = Number(cell) + 1; // 1..6
+  return `/images/section${section}.${idx}.png`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -209,13 +215,11 @@ export async function getSections(req, res) {
       const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
       const reveal = solved || attemptsLeft === 0;
 
-      // NOTE: we still send a truthy imageUrl to denote "revealed".
-      // The frontend will ignore this value and render a background slice of compUrl.
       return {
         cell,
         answered: solved,
         attemptsLeft,
-        imageUrl: reveal ? "revealed" : "", // flag only
+        imageUrl: reveal ? tileImageUrl(secId, cell) : "",
       };
     });
 
@@ -281,7 +285,7 @@ export async function submitAnswer(req, res) {
       correct: true,
       alreadySolved: true,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
-      imageUrl: "revealed"
+      imageUrl: tileImageUrl(section, cell)
     });
   }
 
@@ -291,7 +295,7 @@ export async function submitAnswer(req, res) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      imageUrl: "revealed"
+      imageUrl: tileImageUrl(section, cell)
     });
   }
 
@@ -321,7 +325,7 @@ export async function submitAnswer(req, res) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: -GRID_PENALTY_WRONG_MCQ } });
   }
 
-  // reveal logic + timer unlock
+  // unlock timer if grid fully revealed
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -333,7 +337,7 @@ export async function submitAnswer(req, res) {
   return res.json({
     correct: isCorrect,
     attemptsLeft,
-    imageUrl: revealImage ? "revealed" : ""
+    imageUrl: revealImage ? tileImageUrl(section, cell) : ""
   });
 }
 
