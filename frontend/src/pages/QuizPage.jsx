@@ -26,33 +26,116 @@ function shallowEqual(a, b) {
   return false;
 }
 
+// Build absolute URL for images stored on backend (e.g., /images/q5.png)
+function assetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  // api.defaults.baseURL ends with /api; strip that
+  const base = (api.defaults.baseURL || "").replace(/\/api\/?$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 /* ---------------- Modal (single grid cell question) ---------------- */
-function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, onSubmit, loading }) {
-  const [answer, setAnswer] = useState("");
-  useEffect(() => { setAnswer(""); }, [open, prompt]);
+function QuestionModal({
+  open,
+  onClose,
+  prompt,
+  type,
+  options,
+  imageUrl,
+  attemptsLeft,
+  solved,
+  errorMsg,
+  onSubmit,
+  loading,
+}) {
+  const [answerText, setAnswerText] = useState("");
+  const [selected, setSelected] = useState("");
+
+  useEffect(() => {
+    setAnswerText("");
+    setSelected("");
+  }, [open, prompt, type]);
 
   if (!open) return null;
   const disabled = solved || attemptsLeft <= 0;
 
+  const handleSubmit = () => {
+    if (type === "mcq") {
+      if (!selected) return;
+      onSubmit(selected); // submit the key (a/b/c/d); backend also accepts label text
+    } else {
+      if (!answerText.trim()) return;
+      onSubmit(answerText);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-      <div className="w-full max-w-lg bg-gray-900 rounded-2xl p-5 sm:p-6 border border-gray-700 text-white">
+      <div className="w-full max-w-xl bg-gray-900 rounded-2xl p-5 sm:p-6 border border-gray-700 text-white">
         <h3 className="text-lg sm:text-xl font-semibold mb-2">Question</h3>
-        <p className="text-gray-200 mb-4 text-sm sm:text-base">{prompt}</p>
 
-        <div className="flex items-center justify-between mb-2 text-xs sm:text-sm">
+        {/* prompt */}
+        <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
+          {prompt}
+        </p>
+
+        {/* image (if present) */}
+        {imageUrl ? (
+          <div className="mb-4">
+            <img
+              src={assetUrl(imageUrl)}
+              alt="Question reference"
+              className="w-full rounded-lg border border-gray-700"
+              draggable={false}
+            />
+          </div>
+        ) : null}
+
+        {/* attempts / status */}
+        <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
           <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
           {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
         </div>
 
-        <input
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder="Type your answer…"
-          className={`w-full p-3 rounded-lg bg-gray-800 border focus:outline-none focus:ring-2
-            ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-teal-500"}`}
-          disabled={disabled}
-        />
+        {/* input area */}
+        {type === "mcq" ? (
+          <div className="space-y-2">
+            {(options || []).map((o) => (
+              <label
+                key={o.key}
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                  selected === o.key
+                    ? "border-teal-500 bg-teal-500/10"
+                    : "border-gray-700 hover:bg-gray-800"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="mcq"
+                  className="accent-teal-500"
+                  checked={selected === o.key}
+                  onChange={() => setSelected(o.key)}
+                  disabled={disabled || loading}
+                />
+                <span className="text-sm sm:text-base">
+                  <span className="text-gray-300 font-semibold mr-2">{o.key.toUpperCase()}.</span>
+                  <span className="text-gray-200">{o.label}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <input
+            value={answerText}
+            onChange={(e) => setAnswerText(e.target.value)}
+            placeholder="Type your answer…"
+            className={`w-full p-3 rounded-lg bg-gray-800 border focus:outline-none focus:ring-2
+              ${errorMsg ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-teal-500"}`}
+            disabled={disabled || loading}
+          />
+        )}
+
         {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
 
         <div className="mt-5 flex flex-col sm:flex-row gap-3 sm:justify-end">
@@ -64,9 +147,11 @@ function QuestionModal({ open, onClose, prompt, attemptsLeft, solved, errorMsg, 
             Close
           </button>
           <button
-            onClick={() => onSubmit(answer)}
+            onClick={handleSubmit}
             className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
-              disabled ? "bg-gray-700 cursor-not-allowed" : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
+              disabled
+                ? "bg-gray-700 cursor-not-allowed"
+                : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
             }`}
             disabled={disabled || loading}
           >
@@ -161,6 +246,9 @@ export default function QuizPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [currentCell, setCurrentCell] = useState(null);
   const [question, setQuestion] = useState("");
+  const [qType, setQType] = useState("text");
+  const [qOptions, setQOptions] = useState([]);
+  const [qImage, setQImage] = useState("");
   const [attemptsLeft, setAttemptsLeft] = useState(5);
   const [solved, setSolved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -245,12 +333,18 @@ export default function QuizPage() {
     setCurrentCell(cell);
     setModalOpen(true);
     setQuestion("");
+    setQType("text");
+    setQOptions([]);
+    setQImage("");
     setAttemptsLeft(5);
     setSolved(false);
     setErrorMsg("");
     try {
       const { data } = await api.get("/quiz/question", { params: { section, cell } });
       setQuestion(data.prompt);
+      setQType(data.type || "text");
+      setQOptions(Array.isArray(data.options) ? data.options : []);
+      setQImage(data.imageUrl || "");
       setAttemptsLeft(data.attemptsLeft);
       setSolved(!!data.solved);
     } catch {
@@ -260,7 +354,7 @@ export default function QuizPage() {
 
   // submit answer for a cell
   const submitAnswer = async (answer) => {
-    if (!answer?.trim()) { setErrorMsg("Please enter an answer."); return; }
+    if (!answer?.toString().trim()) { setErrorMsg("Please enter an answer."); return; }
     setSubmitting(true);
     setErrorMsg("");
     try {
@@ -354,7 +448,7 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid (no gap; seamless when fully revealed; no blinking) */}
+        {/* Grid */}
         <div className="flex items-center justify-center">
           <div className="grid grid-cols-3 grid-rows-2 w-full max-w-md gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
             {!initialLoaded ? (
@@ -438,6 +532,9 @@ export default function QuizPage() {
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           prompt={question}
+          type={qType}
+          options={qOptions}
+          imageUrl={qImage}
           attemptsLeft={attemptsLeft}
           solved={solved}
           errorMsg={errorMsg}

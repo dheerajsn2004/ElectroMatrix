@@ -109,14 +109,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
   return await Promise.all(ops);
 }
 
-function buildPromptWithOptions(qDoc) {
-  if (qDoc.type !== "mcq" || !Array.isArray(qDoc.options)) return qDoc.prompt;
-  const opts = qDoc.options
-    .map((o) => `${o.key.toUpperCase()}) ${o.label}`)
-    .join("  |  ");
-  return `${qDoc.prompt}\n\n${opts}`;
-}
-
 /* ------------------------------------------------------------------ */
 /*                           GRID SECTION API                          */
 /* ------------------------------------------------------------------ */
@@ -199,8 +191,10 @@ export async function getQuestion(req, res) {
   res.json({
     section,
     cell,
-    // embed MCQ options so the modal “prints” them without UI changes
-    prompt: buildPromptWithOptions(qDoc),
+    prompt: qDoc.prompt,
+    type: qDoc.type,                 // "mcq" | "text"
+    options: qDoc.options || [],     // [{key,label}] for mcq
+    imageUrl: qDoc.imageUrl || "",   // show inside modal if present
     attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
     solved
   });
