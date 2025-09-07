@@ -202,15 +202,22 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
 
       // If server says completed (all 3 solved), auto-advance
       if (data.completed) {
-        const loaded = await loadSections(); // returns server state
-        if (loaded?.unlockedSection && loaded.unlockedSection > section) {
-          setSection(loaded.unlockedSection);
-        }
+        onSubmit(); // parent refresh handles auto-advance
       } else {
         onSubmit(); // refresh timer/attempts
       }
     } catch (e) {
-      setErr(e?.response?.data?.error || "Error submitting");
+      // Only show specific, actionable messages; otherwise suppress the noisy generic one.
+      const msg = e?.response?.data?.error;
+      if (msg === "Time over") {
+        setErr("Time over");
+      } else if (msg === "No attempts left") {
+        setErr("No attempts left");
+      } else {
+        // Suppress "Error submitting" and just refresh state to advance UI if needed.
+        setErr("");
+      }
+      onSubmit(); // refresh will unlock/advance if appropriate
     } finally {
       setSubmitting(false);
       setAnswer("");
@@ -290,12 +297,10 @@ export default function QuizPage() {
   const loadSections = async () => {
     const { data } = await api.get("/quiz/sections");
 
-    // If server unlocked a higher section, update state
     setUnlockedSection((prev) =>
       prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
     );
 
-    // If newly unlocked section is ahead of current, auto-jump
     if ((data.unlockedSection || 1) > section) {
       setSection(data.unlockedSection || section);
     }
@@ -320,7 +325,6 @@ export default function QuizPage() {
       setRemaining(typeof data.remainingSeconds === "number" ? data.remainingSeconds : null);
       setExpired(!!data.expired);
 
-      // If expired OR all 3 solved, reload sections and auto-advance if unlocked
       const allSolved = (data.questions || []).every((q) => q.solved);
       if (data.expired || allSolved) {
         const loaded = await loadSections();
@@ -354,10 +358,9 @@ export default function QuizPage() {
     return () => clearInterval(id);
   }, [bonusLocked, remaining, expired]);
 
-  // Periodic resync; if expired happens, refreshBonus will auto-advance
   useEffect(() => {
     if (bonusLocked || expired) return;
-    const id = setInterval(() => refreshBonus(section), 5000); // slightly more frequent for snappy switch
+    const id = setInterval(() => refreshBonus(section), 5000);
     return () => clearInterval(id);
   }, [bonusLocked, expired, section]);
 
@@ -404,7 +407,9 @@ export default function QuizPage() {
         }
       }
     } catch (e) {
-      const msg = e?.response?.data?.error || "Error submitting answer";
+      const msg = e?.response?.data?.error || "";
+      // Keep the cell modal UX as-is (we still show explicit server errors),
+      // but avoid a noisy generic fallback.
       setErrorMsg(msg);
       if (e?.response?.status === 403 && e?.response?.data?.attemptsLeft === 0) {
         await loadSections();
