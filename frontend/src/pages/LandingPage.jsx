@@ -7,33 +7,21 @@ export default function LandingPage() {
   return (
     <section className="page-shell text-center">
       <div className="mx-auto max-w-4xl">
-        {/* icon */}
-        <div className="mb-6 flex justify-center">
-          <svg
-            width="88"
-            height="88"
-            viewBox="0 0 24 24"
-            className="block mx-auto text-teal-400 drop-shadow-[0_0_20px_rgba(45,212,191,0.35)]"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            aria-hidden="true"
-          >
-            <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" />
-            <rect x="9.5" y="9.5" width="5" height="5" rx="1.2" />
-            <line x1="12" y1="2"  x2="12" y2="4"  />
-            <line x1="12" y1="20" x2="12" y2="22" />
-            <line x1="4"  y1="12" x2="2"  y2="12" />
-            <line x1="22" y1="12" x2="20" y2="12" />
-          </svg>
-        </div>
-
-        {/* title */}
-        <h1 className="text-[40px] sm:text-6xl md:text-7xl font-extrabold tracking-wide leading-tight">
-          <span className="text-teal-400 drop-shadow-[0_0_30px_rgba(45,212,191,0.35)]">Electro</span>
-          <span className="text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.35)]">Matrix</span>
-        </h1>
-
+      <h1
+        className="
+          kelly-slab-regular
+          text-center
+          leading-tight
+          relative
+          tracking-[0.15em] sm:tracking-[0.2em] md:tracking-[0.25em]
+          text-[clamp(2rem,6vw,3rem)] sm:text-[clamp(2.5rem,5vw,4rem)] md:text-[clamp(3rem,4vw,5rem)]
+        "
+      >
+        <span className="dying-neon">
+          ElectroMatrix
+        </span>
+      </h1>
+          
         <p className="mt-6 text-xl sm:text-3xl text-gray-300/90 tracking-wide">
           Crack the Grid, Unleash the Circuit
         </p>

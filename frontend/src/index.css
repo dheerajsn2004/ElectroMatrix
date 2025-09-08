@@ -1,6 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kelly+Slab&display=swap');
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
 
 /* Grid background (like landing) */
 .bg-grid {
@@ -43,3 +51,86 @@
       bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white;
   }
 }
+.bebas-neue-regular {
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0.1em;
+}
+
+.rajdhani-light {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 300;
+  font-style: normal;
+}
+
+.rajdhani-regular {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.rajdhani-medium {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 500;
+  font-style: normal;
+}
+
+.rajdhani-semibold {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 600;
+  font-style: normal;
+}
+
+.rajdhani-bold {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.kelly-slab-regular {
+  font-family: "Kelly Slab", sans-serif;
+  font-weight: 500;
+  font-style: normal;
+}
+
+
+h1 {
+  font-family: 'Kelly Slab', cursive;
+  font-weight: 100; /* adjust if needed */
+  font-style: normal;
+  font-size: 3rem; /* adjust as needed */
+}
+@keyframes dyingNeon {
+  0% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 4px rgba(0, 245, 255, 0.7),
+      0 0 10px rgba(0, 245, 255, 0.5),
+      0 0 18px rgba(0, 245, 255, 0.3);
+  }
+
+  /* Aggressive flicker for first 0.7s (~30% of 2.3s animation) */
+  5%, 12%, 20%, 28% {
+    color: #A0A0A0;
+    text-shadow: none;
+  }
+  8%, 16%, 24%, 32% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 4px rgba(0, 245, 255, 0.7),
+      0 0 10px rgba(0, 245, 255, 0.5),
+      0 0 18px rgba(0, 245, 255, 0.3);
+  }
+
+  /* Smooth transition to dead grey after flicker */
+  70%, 100% {
+    color: #A0A0A0;
+    text-shadow: none;
+  }
+}
+
+.dying-neon {
+  animation: dyingNeon 2.3s ease-in-out forwards;
+}
+
