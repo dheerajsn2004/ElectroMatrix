@@ -47,7 +47,7 @@ export default function RootLayout() {
           </Link>
 
           {/* desktop nav */}
-          <nav className="hidden sm:flex items-center gap-4 text-xs md:text-sm text-gray-400">
+          {/* <nav className="hidden sm:flex items-center gap-4 text-xs md:text-sm text-gray-400">
             <Link
               to="/"
               className={`${pathname === "/" ? "text-teal-300" : ""}`}
@@ -57,8 +57,13 @@ export default function RootLayout() {
             <Link
               to="/login"
               className={`${pathname.startsWith("/login") ? "text-teal-300" : ""}`}
+
             >
-              Login
+            <span 
+              className="text-sm sm:text-base tracking-wider text-gray-300"
+              style={{ fontFamily: "'Bebas Neue', sans-serif" }}
+            >Login</span>
+              
             </Link>
             <Link
               to="/quiz"
@@ -66,10 +71,10 @@ export default function RootLayout() {
             >
               Quiz
             </Link>
-          </nav>
+          </nav> */}
 
           {/* mobile login button */}
-          <div className="sm:hidden">
+          {/* <div className="sm:hidden">
             <Link
               to="/login"
               onClick={handleLoginClick}
@@ -77,7 +82,7 @@ export default function RootLayout() {
             >
               Login
             </Link>
-          </div>
+          </div> */}
         </header>
 
         {/* page body */}
