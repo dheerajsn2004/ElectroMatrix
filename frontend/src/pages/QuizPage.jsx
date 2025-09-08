@@ -41,6 +41,7 @@ function QuestionModal({
   options,
   imageUrl,
   attemptsLeft,
+  maxAttempts,   // NEW
   solved,
   errorMsg,
   onSubmit,
@@ -106,7 +107,9 @@ function QuestionModal({
           ) : null}
 
           <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
-            <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
+            <span className="text-gray-400">
+              Attempts left: {attemptsLeft}{typeof maxAttempts === "number" ? ` / ${maxAttempts}` : ""}
+            </span>
             {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
           </div>
 
@@ -215,7 +218,7 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold">Q{q.idx + 1}</h4>
         <div className="text-xs text-gray-300">
-          Attempts left: {q.attemptsLeft}
+          Attempts left: {q.attemptsLeft}{typeof q.maxAttempts === "number" ? ` / ${q.maxAttempts}` : ""}
           {q.solved && <span className="ml-2 text-emerald-400">Solved ✓</span>}
           {disabledByTime && <span className="ml-2 text-red-400">Time over</span>}
         </div>
@@ -267,6 +270,7 @@ export default function QuizPage() {
   const [qOptions, setQOptions] = useState([]);
   const [qImage, setQImage] = useState("");
   const [attemptsLeft, setAttemptsLeft] = useState(5);
+  const [qMaxAttempts, setQMaxAttempts] = useState(5); // NEW
   const [solved, setSolved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -362,6 +366,7 @@ export default function QuizPage() {
     setQOptions([]);
     setQImage("");
     setAttemptsLeft(5);
+    setQMaxAttempts(5);
     setSolved(false);
     setErrorMsg("");
     try {
@@ -371,6 +376,7 @@ export default function QuizPage() {
       setQOptions(Array.isArray(data.options) ? data.options : []);
       setQImage(data.imageUrl || "");
       setAttemptsLeft(data.attemptsLeft);
+      setQMaxAttempts(typeof data.maxAttempts === "number" ? data.maxAttempts : (data.type === "mcq" ? 4 : 5));
       setSolved(!!data.solved);
     } catch {
       setQuestion("Question unavailable.");
@@ -384,6 +390,7 @@ export default function QuizPage() {
     try {
       const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
       setAttemptsLeft(data.attemptsLeft);
+      if (typeof data.maxAttempts === "number") setQMaxAttempts(data.maxAttempts);
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
@@ -409,7 +416,7 @@ export default function QuizPage() {
   };
 
   const current = sections.find((s) => s.id === section) || {
-    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5 })),
+    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5, maxAttempts: 5 })),
     compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
@@ -486,7 +493,7 @@ export default function QuizPage() {
                   decoding="sync"
                 />
               ) : (
-                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
+                current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
                   <button
                     key={cell}
                     onClick={() => openCell(cell)}
@@ -502,7 +509,9 @@ export default function QuizPage() {
                         decoding="sync"
                       />
                     ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">{al}/5</span>
+                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">
+                        {al}{typeof mx === "number" ? `/${mx}` : ""}
+                      </span>
                     )}
                   </button>
                 ))
@@ -557,6 +566,7 @@ export default function QuizPage() {
           options={qOptions}
           imageUrl={qImage}
           attemptsLeft={attemptsLeft}
+          maxAttempts={qMaxAttempts}
           solved={solved}
           errorMsg={errorMsg}
           onSubmit={submitAnswer}

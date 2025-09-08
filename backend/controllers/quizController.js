@@ -8,14 +8,17 @@ import TeamSectionResponse from "../models/TeamSectionResponse.js";
 import SectionMeta from "../models/SectionMeta.js";
 import TeamSectionTimer from "../models/TeamSectionTimer.js";
 
-const MAX_ATTEMPTS = 5;
+/* -------------------- attempts config -------------------- */
+const MAX_ATTEMPTS_TEXT = 5; // text questions (and section meta question)
+const MAX_ATTEMPTS_MCQ  = 4; // MCQs (reduced attempts)
 
-// Scoring rules
-const GRID_POINTS_CORRECT = 2;          // grid tile question correct
-const GRID_PENALTY_WRONG_MCQ = 1;       // penalty per wrong attempt (MCQ only)
-const SECTION_POINTS_CORRECT = 5;       // section meta-question (single)
+/* -------------------- scoring rules -------------------- */
+const GRID_POINTS_CORRECT = 2;    // grid tile question correct
+const GRID_PENALTY_WRONG_MCQ = 1; // penalty per wrong attempt (MCQ only)
+const SECTION_POINTS_CORRECT = 5; // section meta-question (single)
 
-// Old helper, keep for MCQ key/label matching
+/* -------------------- helpers: normalization -------------------- */
+// Old helper, kept for MCQ key/label matching and general equality
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
 /* -------------------- Robust text answer helpers (NEW) -------------------- */
@@ -52,20 +55,41 @@ function compareAnswers(userAns, correctAns) {
   return u === c;
 }
 
+/* -------------------- attempts helpers (NEW) -------------------- */
+function maxAttemptsForType(type) {
+  return (String(type).toLowerCase() === "mcq") ? MAX_ATTEMPTS_MCQ : MAX_ATTEMPTS_TEXT;
+}
+
 /* ------------------------------------------------------------------ */
 /*                              HELPERS                                */
 /* ------------------------------------------------------------------ */
 
-// A cell is "completed" if solved OR attempts exhausted
+// A cell is "completed" if solved OR attempts exhausted (using per-type max)
 async function teamCompletedAllCells(teamId, section) {
-  const docs = await TeamResponse.find(
-    { team: teamId, section },
-    { attempts: 1, isCorrect: 1 }
-  ).lean();
+  const [responses, assigns] = await Promise.all([
+    TeamResponse.find({ team: teamId, section }, { attempts: 1, isCorrect: 1, cell: 1 }).lean(),
+    SectionGridAssignment.find({ team: teamId, section }, { cell: 1, question: 1 }).lean(),
+  ]);
+
+  // map cell -> type
+  const qById = new Map();
+  if (assigns.length) {
+    const qIds = assigns.map(a => a.question);
+    const qs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
+    for (const q of qs) qById.set(String(q._id), q);
+  }
+  const typeByCell = new Map();
+  for (const a of assigns) {
+    const q = qById.get(String(a.question));
+    typeByCell.set(a.cell, q?.type || "text");
+  }
 
   let completed = 0;
-  for (const d of docs) {
-    if (d.isCorrect || (d.attempts || 0) >= MAX_ATTEMPTS) completed++;
+  for (let cell = 0; cell < 6; cell++) {
+    const r = responses.find(x => x.cell === cell);
+    const type = typeByCell.get(cell) || "text";
+    const maxA = maxAttemptsForType(type);
+    if (r?.isCorrect || ((r?.attempts || 0) >= maxA)) completed++;
   }
   return completed >= 6;
 }
@@ -338,23 +362,40 @@ export async function getSections(req, res) {
     ensureAssignmentsForTeamSection(teamId, 3),
   ]);
 
+  // Preload all assignments and their questions for performance
+  const [as1, as2, as3] = await Promise.all([
+    SectionGridAssignment.find({ team: teamId, section: 1 }).lean(),
+    SectionGridAssignment.find({ team: teamId, section: 2 }).lean(),
+    SectionGridAssignment.find({ team: teamId, section: 3 }).lean(),
+  ]);
+  const allAssigns = [...as1, ...as2, ...as3];
+  const qIds = allAssigns.map(a => a.question);
+  const qDocs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
+  const qById = new Map(qDocs.map(q => [String(q._id), q]));
+
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
   const buildSection = async (secId) => {
     const compUrl = await compositeImageUrl(secId);
+    const assigns = secId === 1 ? as1 : secId === 2 ? as2 : as3;
 
     const cells = Array.from({ length: 6 }, (_, cell) => {
       const r = rMap.get(`${secId}:${cell}`);
-      const solved = !!r?.isCorrect;
+      const assign = assigns.find(a => a.cell === cell);
+      const q = assign ? qById.get(String(assign.question)) : null;
+      const type = q?.type || "text";
+      const maxA = maxAttemptsForType(type);
       const attempts = r?.attempts || 0;
-      const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
+      const solved = !!r?.isCorrect;
+      const attemptsLeft = Math.max(0, maxA - attempts);
       const reveal = solved || attemptsLeft === 0;
 
       return {
         cell,
         answered: solved,
         attemptsLeft,
+        maxAttempts: maxA, // NEW
         imageUrl: reveal ? tileImageUrl(secId, cell) : "",
       };
     });
@@ -389,6 +430,8 @@ export async function getQuestion(req, res) {
   const attempts = r?.attempts || 0;
   const solved = !!r?.isCorrect;
 
+  const maxAttempts = maxAttemptsForType(qDoc.type);
+
   res.json({
     section,
     cell,
@@ -396,7 +439,8 @@ export async function getQuestion(req, res) {
     type: qDoc.type,
     options: qDoc.options || [],
     imageUrl: qDoc.imageUrl || "",
-    attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
+    attemptsLeft: Math.max(0, maxAttempts - attempts),
+    maxAttempts, // NEW
     solved
   });
 }
@@ -417,23 +461,27 @@ export async function submitAnswer(req, res) {
   const qDoc = await GridQuestion.findById(assign.question).lean();
   if (!qDoc) return res.status(404).json({ error: "Question not found" });
 
+  const maxAttempts = maxAttemptsForType(qDoc.type);
+
   let tr = await TeamResponse.findOne({ team: teamId, section, cell });
 
   if (tr?.isCorrect) {
     return res.json({
       correct: true,
       alreadySolved: true,
-      attemptsLeft: Math.max(0, MAX_ATTEMPTS - (tr.attempts || 0)),
+      attemptsLeft: Math.max(0, maxAttempts - (tr.attempts || 0)),
+      maxAttempts, // NEW
       imageUrl: tileImageUrl(section, cell)
     });
   }
 
   const currentAttempts = tr?.attempts || 0;
 
-  if (currentAttempts >= MAX_ATTEMPTS) {
+  if (currentAttempts >= maxAttempts) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
+      maxAttempts, // NEW
       imageUrl: tileImageUrl(section, cell)
     });
   }
@@ -471,12 +519,13 @@ export async function submitAnswer(req, res) {
     await ensureSectionTimer(teamId, section);
   }
 
-  const attemptsLeft = Math.max(0, MAX_ATTEMPTS - attempts);
+  const attemptsLeft = Math.max(0, maxAttempts - attempts);
   const revealImage = isCorrect || attemptsLeft === 0;
 
   return res.json({
     correct: isCorrect,
     attemptsLeft,
+    maxAttempts, // NEW
     imageUrl: revealImage ? tileImageUrl(section, cell) : ""
   });
 }
@@ -528,7 +577,8 @@ export async function getSectionQuestions(req, res) {
       idx: q.idx,
       prompt: q.prompt,
       solved: !!r?.isCorrect,
-      attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts)
+      attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - attempts), // meta uses TEXT limit (5)
+      maxAttempts: MAX_ATTEMPTS_TEXT, // NEW (explicit)
     };
   });
 
@@ -575,16 +625,18 @@ export async function submitSectionAnswer(req, res) {
   let tr = await TeamSectionResponse.findOne({ team: teamId, section, idx });
 
   const currentAttempts = tr?.attempts || 0;
+  const maxAttempts = MAX_ATTEMPTS_TEXT; // meta (text) questions = 5
+
   if (tr?.isCorrect) {
     return res.json({
       correct: true,
       alreadySolved: true,
-      attemptsLeft: Math.max(0, MAX_ATTEMPTS - currentAttempts),
+      attemptsLeft: Math.max(0, maxAttempts - currentAttempts),
       remainingSeconds,
       completed: await sectionCompleted(teamId, section)
     });
   }
-  if (currentAttempts >= MAX_ATTEMPTS) {
+  if (currentAttempts >= maxAttempts) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
@@ -626,7 +678,7 @@ export async function submitSectionAnswer(req, res) {
 
   return res.json({
     correct: isCorrect,
-    attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts),
+    attemptsLeft: Math.max(0, maxAttempts - attempts),
     remainingSeconds: nowRemaining,
     completed: completedNow
   });
