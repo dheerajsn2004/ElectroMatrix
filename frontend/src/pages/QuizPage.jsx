@@ -1,4 +1,3 @@
-// frontend/src/pages/QuizPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
@@ -73,6 +72,7 @@ function QuestionModal({
       <div
         className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl flex flex-col"
         style={{ maxHeight: "85vh" }}
+        onCopy={(e) => e.preventDefault()} /* extra guard */
       >
         {/* Header */}
         <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between">
@@ -88,7 +88,7 @@ function QuestionModal({
 
         {/* Scrollable content */}
         <div className="flex-1 px-5 sm:px-6 py-4 overflow-y-auto">
-          <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap select-none">
+          <p className="no-select text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
             {prompt}
           </p>
 
@@ -115,11 +115,11 @@ function QuestionModal({
               {(options || []).map((o) => (
                 <label
                   key={o.key}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                  className={`no-select flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
                     selected === o.key
                       ? "border-teal-500 bg-teal-500/10"
                       : "border-gray-700 hover:bg-gray-800"
-                  } select-none`}
+                  }`}
                 >
                   <input
                     type="radio"
@@ -129,7 +129,7 @@ function QuestionModal({
                     onChange={() => setSelected(o.key)}
                     disabled={disabled || loading}
                   />
-                  <span className="text-sm sm:text-base select-none">
+                  <span className="no-select text-sm sm:text-base">
                     <span className="text-gray-300 font-semibold mr-2">{o.key.toUpperCase()}.</span>
                     <span className="text-gray-200">{o.label}</span>
                   </span>
@@ -211,16 +211,16 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 sm:p-5">
+    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 sm:p-5" onCopy={(e)=>e.preventDefault()}>
       <div className="flex items-center justify-between mb-2">
-        <h4 className="font-semibold select-none">Q{q.idx + 1}</h4>
-        <div className="text-xs text-gray-300 select-none">
+        <h4 className="font-semibold">Q{q.idx + 1}</h4>
+        <div className="text-xs text-gray-300">
           Attempts left: {q.attemptsLeft}
           {q.solved && <span className="ml-2 text-emerald-400">Solved ✓</span>}
           {disabledByTime && <span className="ml-2 text-red-400">Time over</span>}
         </div>
       </div>
-      <p className="text-gray-200 mb-3 text-sm sm:text-base select-none">{q.prompt}</p>
+      <p className="no-select text-gray-200 mb-3 text-sm sm:text-base">{q.prompt}</p>
 
       <div className="flex flex-col md:flex-row gap-2">
         <input
@@ -263,10 +263,10 @@ export default function QuizPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [currentCell, setCurrentCell] = useState(null);
   const [question, setQuestion] = useState("");
-  const [qType, setQType] = useState("text");
+  const [qType, setQType] = useState("text");   // ✅ fixed
   const [qOptions, setQOptions] = useState([]);
   const [qImage, setQImage] = useState("");
-  const [attemptsLeft, setAttemptsLeft] = useState(0);
+  const [attemptsLeft, setAttemptsLeft] = useState(5);
   const [solved, setSolved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -361,7 +361,7 @@ export default function QuizPage() {
     setQType("text");
     setQOptions([]);
     setQImage("");
-    setAttemptsLeft(0);
+    setAttemptsLeft(5);
     setSolved(false);
     setErrorMsg("");
     try {
@@ -370,7 +370,7 @@ export default function QuizPage() {
       setQType(data.type || "text");
       setQOptions(Array.isArray(data.options) ? data.options : []);
       setQImage(data.imageUrl || "");
-      setAttemptsLeft(data.attemptsLeft);   // from backend
+      setAttemptsLeft(data.attemptsLeft);
       setSolved(!!data.solved);
     } catch {
       setQuestion("Question unavailable.");
@@ -409,7 +409,7 @@ export default function QuizPage() {
   };
 
   const current = sections.find((s) => s.id === section) || {
-    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 0, attemptsMax: 0 })),
+    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5 })),
     compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
@@ -434,9 +434,9 @@ export default function QuizPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-teal-400 select-none">ElectroMatrix – Quiz</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-teal-400">ElectroMatrix – Quiz</h1>
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate select-none">Team: {team?.username || "—"}</span>
+            <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
             <button
               onClick={() => { localStorage.removeItem("team"); localStorage.removeItem("activeSection"); navigate("/login"); }}
               className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700"
@@ -475,7 +475,7 @@ export default function QuizPage() {
           <div className="relative w-full max-w-md">
             <div className="grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
               {!initialLoaded ? (
-                <div className="col-span-3 text-center text-gray-300 py-10 select-none">Loading…</div>
+                <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
               ) : allRevealed ? (
                 <img
                   src={assetUrl(current.compositeImageUrl)}
@@ -486,7 +486,7 @@ export default function QuizPage() {
                   decoding="sync"
                 />
               ) : (
-                current.cells.map(({ cell, attemptsLeft: al, attemptsMax: am, imageUrl }) => (
+                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
                   <button
                     key={cell}
                     onClick={() => openCell(cell)}
@@ -502,9 +502,7 @@ export default function QuizPage() {
                         decoding="sync"
                       />
                     ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-gray-300 select-none">
-                        {al}/{am}
-                      </span>
+                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">{al}/5</span>
                     )}
                   </button>
                 ))
@@ -520,13 +518,13 @@ export default function QuizPage() {
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h3 className="text-lg sm:text-xl font-semibold select-none">Section {section} Challenge</h3>
+            <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
             {!bonusLocked && (
               <div className={`text-sm px-3 py-1 rounded-lg border ${
                 expired ? "border-red-500 text-red-400" :
                 remaining === null ? "border-emerald-500 text-emerald-400" :
                 "border-teal-500 text-teal-300"
-              } select-none`}>
+              }`}>
                 {expired ? "Time over" :
                  remaining === null ? "Completed" : `Time left: ${fmt(remaining)}`}
               </div>
@@ -534,7 +532,7 @@ export default function QuizPage() {
           </div>
 
           {bonusLocked ? (
-            <div className="text-gray-300 text-sm sm:text-base select-none">Solve all 6 cells to unlock these questions.</div>
+            <div className="text-gray-300 text-sm sm:text-base">Solve all 6 cells to unlock these questions.</div>
           ) : (
             <div className="space-y-4">
               {bonusQs.map((q) => (
