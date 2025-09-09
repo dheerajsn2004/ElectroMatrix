@@ -1,0 +1,22 @@
+/* blink twice animation for mobile login */
+@keyframes blinkMobile {
+  0%, 20%, 40%, 60%, 100% {
+    text-shadow: 0 0 3px #00fff0, 0 0 6px #00fff0;
+    opacity: 1;
+  }
+  10%, 30%, 50%, 70%, 90% {
+    text-shadow: none;
+    opacity: 0.3;
+  }
+}
+
+/* apply blinking animation once (two blinks) */
+.blink-mobile {
+  animation: blinkMobile 1.5s 1;
+}
+
+/* permanently lit after blinking */
+.login-on {
+  text-shadow: 0 0 5px #00fff0, 0 0 10px #00fff0, 0 0 20px #00fff0;
+  color: #00fff0;
+}

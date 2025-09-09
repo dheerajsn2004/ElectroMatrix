@@ -1,6 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kelly+Slab&display=swap');
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
 
 /* Grid background (like landing) */
 .bg-grid {
@@ -51,3 +57,176 @@
       bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white;
   }
 }
+.bebas-neue-regular {
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: 0.1em;
+}
+
+
+
+
+.kelly-slab-regular {
+  font-family: "Kelly Slab", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+
+h1 {
+  font-family: 'Kelly Slab', cursive;
+  font-weight: 100; /* adjust if needed */
+  font-style: normal;
+  font-size: 3rem; /* adjust as needed */
+}
+@keyframes horrorShutdown {
+  0% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 8px rgba(0, 245, 255, 1),
+      0 0 25px rgba(0, 245, 255, 0.9),
+      0 0 50px rgba(0, 245, 255, 0.7);
+  }
+
+  /* Aggressive chaotic flickers */
+  5%, 9%, 14%, 18%, 23%, 27%, 32% {
+    color: #A0A0A0;
+    text-shadow: none;
+  }
+
+  7%, 12%, 16%, 21%, 25%, 29%, 35% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 6px rgba(0, 245, 255, 0.9),
+      0 0 20px rgba(0, 245, 255, 0.6),
+      0 0 40px rgba(0, 245, 255, 0.4);
+  }
+
+  /* Big panic flash */
+  45% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 15px rgba(0, 245, 255, 1),
+      0 0 45px rgba(0, 245, 255, 0.9),
+      0 0 80px rgba(0, 245, 255, 0.7);
+    transform: scale(1.02);
+  }
+
+  /* Rapid collapse */
+  55% {
+    color: #4ea6ac;
+    text-shadow:
+      0 0 4px rgba(0, 245, 255, 0.4),
+      0 0 10px rgba(0, 245, 255, 0.2);
+    transform: scale(0.99);
+  }
+
+  /* Dead blackout */
+  70%, 100% {
+    color: #A0A0A0;
+    text-shadow: none;
+    transform: none;
+  }
+}
+
+.dying-neon {
+  animation: horrorShutdown 3.5s ease-in-out forwards;
+}
+
+
+
+/* Fade-in for mission text */
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeInDelayed {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fadeIn 1s ease forwards;
+  animation-delay: 2.6s; /* matches dyingNeon */
+}
+
+
+@keyframes whiteRevival {
+  0% {
+    color: #808080; /* dull grey */
+    text-shadow: none;
+  }
+
+  /* Flickers */
+  10%, 18%, 26% {
+    color: #808080;
+    text-shadow: none;
+  }
+
+  14%, 22%, 30% {
+    color: #ffffff;
+    text-shadow:
+      0 0 6px rgba(255, 255, 255, 0.7),
+      0 0 15px rgba(255, 255, 255, 0.5);
+  }
+
+  /* Surge */
+  45% {
+    color: #ffffff;
+    text-shadow:
+      0 0 10px rgba(255, 255, 255, 0.9),
+      0 0 25px rgba(255, 255, 255, 0.7),
+      0 0 50px rgba(255, 255, 255, 0.5);
+  }
+
+  /* Final stable white glow */
+  60%, 100% {
+    color: #ffffff;
+    text-shadow:
+      0 0 8px rgba(255, 255, 255, 0.9),
+      0 0 20px rgba(255, 255, 255, 0.6),
+      0 0 40px rgba(255, 255, 255, 0.4);
+  }
+}
+
+.white-revival {
+  animation: whiteRevival 3s ease-in-out forwards;
+}
+
+.fade-in-delayed {
+  opacity: 0;
+  animation: fadeIn 1.5s ease forwards;
+  animation-delay: 3s;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes soft-flicker {
+  0% { opacity: 0.4; }
+  20% { opacity: 1; }
+  40% { opacity: 0.7; }
+  60% { opacity: 1; }
+  80% { opacity: 0.9; }
+  100% { opacity: 1; }
+}
+
+@keyframes flicker-unsuccessful {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(255,110,95,0.5);
+  }
+  20%, 22%, 24%, 55% {
+    opacity: 0.85;
+    text-shadow: 0 0 6px rgba(255,110,95,0.4);
+  }
+}
+
+.flicker-unsuccessful {
+  animation: flicker-unsuccessful 2.5s infinite;
+}
+
