@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "https://electromatrix-i5it.onrender.com/api",
+  baseURL: "https://electromatrix.onrender.com/api",
 });
 
 // Attach team username from localStorage to each request
@@ -14,3 +14,4 @@ api.interceptors.request.use((config) => {
   } catch {}
   return config;
 });
+
