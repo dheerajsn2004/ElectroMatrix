@@ -5,6 +5,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import QuizPage from "./pages/QuizPage";
 import ThankYou from "./pages/ThankYou";
+import AttemptUnsuccessful from "./pages/AttemptUnsuccessful";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/thank-you" element={<ThankYou />} />
+        <Route path="/unsuccessful" element={<AttemptUnsuccessful />} />
       </Route>
     </Routes>
   );

@@ -1,7 +1,7 @@
-// frontend/src/pages/QuizPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
+import BreakConnectionButton from "../components/BreakConnectionButton";
 
 /* --------------------- small helpers --------------------- */
 function shallowEqual(a, b) {
@@ -42,6 +42,7 @@ function QuestionModal({
   options,
   imageUrl,
   attemptsLeft,
+  maxAttempts,   // NEW
   solved,
   errorMsg,
   onSubmit,
@@ -73,6 +74,7 @@ function QuestionModal({
       <div
         className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl flex flex-col"
         style={{ maxHeight: "85vh" }}
+        onCopy={(e) => e.preventDefault()} /* extra guard */
       >
         {/* Header */}
         <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between">
@@ -88,14 +90,14 @@ function QuestionModal({
 
         {/* Scrollable content */}
         <div className="flex-1 px-5 sm:px-6 py-4 overflow-y-auto">
-          <p className="text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
+          <p className="no-select text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
             {prompt}
           </p>
 
           {imageUrl ? (
             <div className="mb-4">
               <img
-                src={assetUrl(imageUrl)}   
+                src={assetUrl(imageUrl)}
                 alt="Question reference"
                 className="w-full max-h-80 object-contain rounded-lg border border-gray-700"
                 draggable={false}
@@ -106,16 +108,19 @@ function QuestionModal({
           ) : null}
 
           <div className="flex items-center justify-between mb-3 text-xs sm:text-sm">
-            <span className="text-gray-400">Attempts left: {attemptsLeft}</span>
+            <span className="text-gray-400">
+              Attempts left: {attemptsLeft}{typeof maxAttempts === "number" ? ` / ${maxAttempts}` : ""}
+            </span>
             {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
           </div>
-
+          {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
+          <br></br>
           {type === "mcq" ? (
             <div className="space-y-2">
               {(options || []).map((o) => (
                 <label
                   key={o.key}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                  className={`no-select flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
                     selected === o.key
                       ? "border-teal-500 bg-teal-500/10"
                       : "border-gray-700 hover:bg-gray-800"
@@ -129,7 +134,7 @@ function QuestionModal({
                     onChange={() => setSelected(o.key)}
                     disabled={disabled || loading}
                   />
-                  <span className="text-sm sm:text-base">
+                  <span className="no-select text-sm sm:text-base">
                     <span className="text-gray-300 font-semibold mr-2">{o.key.toUpperCase()}.</span>
                     <span className="text-gray-200">{o.label}</span>
                   </span>
@@ -146,30 +151,34 @@ function QuestionModal({
               disabled={disabled || loading}
             />
           )}
-
-          {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
         </div>
 
         {/* Footer stays pinned */}
+
         <div className="px-5 sm:px-6 py-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3 sm:justify-end">
+
           <button
+  onClick={handleSubmit}
+  className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition ${
+    disabled
+      ? "bg-gray-700 cursor-not-allowed text-gray-400"
+      : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+  }`}
+  disabled={disabled || loading}
+>
+  {loading ? "Submitting…" : "Submit"}
+</button>
+
+          {/* <button
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
             disabled={loading}
           >
             Close
-          </button>
-          <button
-            onClick={handleSubmit}
-            className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
-              disabled
-                ? "bg-gray-700 cursor-not-allowed"
-                : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
-            }`}
-            disabled={disabled || loading}
-          >
-            {loading ? "Submitting…" : "Submit"}
-          </button>
+          </button> */}
+
+
+
         </div>
       </div>
     </div>
@@ -211,16 +220,16 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 sm:p-5">
+    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 sm:p-5" onCopy={(e)=>e.preventDefault()}>
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold">Q{q.idx + 1}</h4>
         <div className="text-xs text-gray-300">
-          Attempts left: {q.attemptsLeft}
+          Attempts left: {q.attemptsLeft}{typeof q.maxAttempts === "number" ? ` / ${q.maxAttempts}` : ""}
           {q.solved && <span className="ml-2 text-emerald-400">Solved ✓</span>}
           {disabledByTime && <span className="ml-2 text-red-400">Time over</span>}
         </div>
       </div>
-      <p className="text-gray-200 mb-3 text-sm sm:text-base">{q.prompt}</p>
+      <p className="no-select text-gray-200 mb-3 text-sm sm:text-base">{q.prompt}</p>
 
       <div className="flex flex-col md:flex-row gap-2">
         <input
@@ -233,10 +242,15 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         <button
           onClick={submit}
           disabled={disabled || submitting}
-          className={`w-full md:w-auto px-4 py-3 rounded-lg ${disabled ? "bg-gray-700 cursor-not-allowed" : "bg-teal-600 hover:bg-teal-500"}`}
+          className={`w-full md:w-auto px-4 py-3 rounded-lg font-semibold transition ${
+            disabled
+              ? "bg-gray-700 cursor-not-allowed text-gray-400"
+              : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+          }`}
         >
           {submitting ? "Submitting…" : "Submit"}
         </button>
+
       </div>
       {err && <div className="mt-2 text-sm text-red-400">{err}</div>}
     </div>
@@ -260,18 +274,17 @@ export default function QuizPage() {
   const [initialLoaded, setInitialLoaded] = useState(false);
 
   // modal state
- // modal state
-const [modalOpen, setModalOpen] = useState(false);
-const [currentCell, setCurrentCell] = useState(null);
-const [question, setQuestion] = useState("");
-const [qType, setQType] = useState("text");   // ✅ fixed
-const [qOptions, setQOptions] = useState([]);
-const [qImage, setQImage] = useState("");
-const [attemptsLeft, setAttemptsLeft] = useState(5);
-const [solved, setSolved] = useState(false);
-const [submitting, setSubmitting] = useState(false);
-const [errorMsg, setErrorMsg] = useState("");
-
+  const [modalOpen, setModalOpen] = useState(false);
+  const [currentCell, setCurrentCell] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [qType, setQType] = useState("text");   // ✅ fixed
+  const [qOptions, setQOptions] = useState([]);
+  const [qImage, setQImage] = useState("");
+  const [attemptsLeft, setAttemptsLeft] = useState(5);
+  const [qMaxAttempts, setQMaxAttempts] = useState(5); // NEW
+  const [solved, setSolved] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   // section challenge state (+ timer)
   const [bonusLocked, setBonusLocked] = useState(true);
@@ -364,6 +377,7 @@ const [errorMsg, setErrorMsg] = useState("");
     setQOptions([]);
     setQImage("");
     setAttemptsLeft(5);
+    setQMaxAttempts(5);
     setSolved(false);
     setErrorMsg("");
     try {
@@ -373,6 +387,7 @@ const [errorMsg, setErrorMsg] = useState("");
       setQOptions(Array.isArray(data.options) ? data.options : []);
       setQImage(data.imageUrl || "");
       setAttemptsLeft(data.attemptsLeft);
+      setQMaxAttempts(typeof data.maxAttempts === "number" ? data.maxAttempts : (data.type === "mcq" ? 4 : 5));
       setSolved(!!data.solved);
     } catch {
       setQuestion("Question unavailable.");
@@ -386,6 +401,7 @@ const [errorMsg, setErrorMsg] = useState("");
     try {
       const { data } = await api.post("/quiz/answer", { section, cell: currentCell, answer });
       setAttemptsLeft(data.attemptsLeft);
+      if (typeof data.maxAttempts === "number") setQMaxAttempts(data.maxAttempts);
       if (data.correct) {
         setSolved(true);
         setModalOpen(false);
@@ -411,7 +427,7 @@ const [errorMsg, setErrorMsg] = useState("");
   };
 
   const current = sections.find((s) => s.id === section) || {
-    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5 })),
+    cells: Array.from({ length: 6 }, (_, i) => ({ cell: i, imageUrl: "", attemptsLeft: 5, maxAttempts: 5 })),
     compositeImageUrl: "",
   };
   const allRevealed = current.cells.every((c) => Boolean(c.imageUrl));
@@ -436,15 +452,56 @@ const [errorMsg, setErrorMsg] = useState("");
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-teal-400">ElectroMatrix – Quiz</h1>
+  <h1
+    className="text-2xl sm:text-3xl font-bold tracking-wide"
+    style={{
+      color: (() => {
+        const solvedSections = sections.filter((s) =>
+          s.cells.every((c) => Boolean(c.imageUrl))
+        ).length;
+
+        switch (solvedSections) {
+          case 0:
+            return "#9aa6b2"; // initial gray
+          case 1:
+            return "#c0c8d0"; // very slight white
+          case 2:
+            return "#e0e8f0"; // brighter white
+          case 3:
+            return "#ffffff"; // fully bright white
+          default:
+            return "#9aa6b2";
+        }
+      })(),
+      textShadow: (() => {
+        const solvedSections = sections.filter((s) =>
+          s.cells.every((c) => Boolean(c.imageUrl))
+        ).length;
+
+        switch (solvedSections) {
+          case 0:
+            return "0 0 4px rgba(0,245,255,0.3)";
+          case 1:
+            return "0 0 8px rgba(0,245,255,0.5)";
+          case 2:
+            return "0 0 12px rgba(0,245,255,0.7)";
+          case 3:
+            return "0 0 20px rgba(0,245,255,1)";
+          default:
+            return "0 0 4px rgba(0,245,255,0.3)";
+        }
+      })(),
+      transition: "color 1s ease-in-out, text-shadow 1s ease-in-out",
+    }}
+  >
+    ElectroMatrix – Quiz
+  </h1>
+
+
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
-            <button
-              onClick={() => { localStorage.removeItem("team"); localStorage.removeItem("activeSection"); navigate("/login"); }}
-              className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700"
-            >
-              Logout
-            </button>
+<BreakConnectionButton message="Don’t give up! Each try brings you closer to success." />
+
           </div>
         </header>
 
@@ -472,50 +529,83 @@ const [errorMsg, setErrorMsg] = useState("");
           })}
         </div>
 
-        {/* Grid / Composite */}
-        <div className="flex items-center justify-center">
-          <div className="relative w-full max-w-md">
-            <div className="grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
-              {!initialLoaded ? (
-                <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
-              ) : allRevealed ? (
-                <img
-                  src={assetUrl(current.compositeImageUrl)}
-                  alt={`Section ${section} Composite`}
-                  className="col-span-3 row-span-2 w-full h-full object-cover block"
-                  draggable={false}
-                  loading="eager"
-                  decoding="sync"
-                />
-              ) : (
-                current.cells.map(({ cell, attemptsLeft: al, imageUrl }) => (
-                  <button
-                    key={cell}
-                    onClick={() => openCell(cell)}
-                    className="relative aspect-square p-0 m-0 border border-gray-700"
-                  >
-                    {imageUrl ? (
-                      <img
-                        src={assetUrl(imageUrl)}
-                        alt={`S${section} C${cell + 1}`}
-                        className="absolute inset-0 w-full h-full object-cover block"
-                        draggable={false}
-                        loading="eager"
-                        decoding="sync"
-                      />
-                    ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">{al}/5</span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-
-            {allRevealed && (
-              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gray-700/60" />
+{/* Grid / Composite */}
+<div className="flex items-center justify-center">
+  <div className="relative w-full max-w-md">
+    <div
+      className={`
+        grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-2
+        ${
+          section === 1
+            ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+            : section === 2
+            ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+            : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+        }
+      `}
+    >
+      {!initialLoaded ? (
+        <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
+      ) : allRevealed ? (
+        <img
+          src={assetUrl(current.compositeImageUrl)}
+          alt={`Section ${section} Composite`}
+          className="col-span-3 row-span-2 w-full h-full object-cover block"
+          draggable={false}
+          loading="eager"
+          decoding="sync"
+        />
+      ) : (
+        current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
+          <button
+            key={cell}
+            onClick={() => openCell(cell)}
+            className={`
+              relative aspect-square p-0 m-0 border-2
+              ${
+                section === 1
+                  ? "border-cyan-400/60 shadow-[0_0_6px_rgba(0,245,255,0.25)]"
+                  : section === 2
+                  ? "border-cyan-400/80 shadow-[0_0_8px_rgba(0,245,255,0.35),0_0_14px_rgba(34,197,94,0.2)]"
+                  : "border-emerald-400/80 shadow-[0_0_10px_rgba(0,245,200,0.45),0_0_18px_rgba(34,197,94,0.3)]"
+              }
+            `}
+          >
+            {imageUrl ? (
+              <img
+                src={assetUrl(imageUrl)}
+                alt={`S${section} C${cell + 1}`}
+                className="absolute inset-0 w-full h-full object-cover block"
+                draggable={false}
+                loading="eager"
+                decoding="sync"
+              />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center text-gray-300">
+                {al}{typeof mx === "number" ? `/${mx}` : ""}
+              </span>
             )}
-          </div>
-        </div>
+          </button>
+        ))
+      )}
+    </div>
+
+    {allRevealed && (
+      <div
+        className={`
+          pointer-events-none absolute inset-0 rounded-2xl ring-2
+          ${
+            section === 1
+              ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+              : section === 2
+              ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+              : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+          }
+        `}
+      />
+    )}
+  </div>
+</div>
 
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
@@ -559,6 +649,7 @@ const [errorMsg, setErrorMsg] = useState("");
           options={qOptions}
           imageUrl={qImage}
           attemptsLeft={attemptsLeft}
+          maxAttempts={qMaxAttempts}
           solved={solved}
           errorMsg={errorMsg}
           onSubmit={submitAnswer}
