@@ -169,13 +169,13 @@ function QuestionModal({
   {loading ? "Submitting…" : "Submit"}
 </button>
 
-          <button
+          {/* <button
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
             disabled={loading}
           >
             Close
-          </button>
+          </button> */}
 
 
 
