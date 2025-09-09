@@ -10,7 +10,7 @@ import TeamSectionTimer from "../models/TeamSectionTimer.js";
 
 /* -------------------- attempts config -------------------- */
 const MAX_ATTEMPTS_TEXT = 5; // text questions (and section meta question)
-const MAX_ATTEMPTS_MCQ  = 4; // MCQs (reduced attempts)
+const MAX_ATTEMPTS_MCQ  = 4; // MCQs
 
 /* -------------------- scoring rules -------------------- */
 const GRID_POINTS_CORRECT = 2;    // grid tile question correct
@@ -18,22 +18,17 @@ const GRID_PENALTY_WRONG_MCQ = 1; // penalty per wrong attempt (MCQ only)
 const SECTION_POINTS_CORRECT = 5; // section meta-question (single)
 
 /* -------------------- helpers: normalization -------------------- */
-// Old helper, kept for MCQ key/label matching and general equality
 const normalize = (s = "") => String(s).trim().toLowerCase();
 
-/* -------------------- Robust text answer helpers (NEW) -------------------- */
-// Normalizes user/free-text answers: case-insensitive, trims, unifies separators.
 function normalizeAnswer(answer) {
   if (answer === null || answer === undefined) return "";
   return String(answer)
     .toLowerCase()
-    .replace(/\s+/g, " ")   // collapse multiple spaces
-    .replace(/[,;|]+/g, ",")// unify popular separators to comma
+    .replace(/\s+/g, " ")
+    .replace(/[,;|]+/g, ",")
     .trim();
 }
 
-// Compares user vs correct answer.
-// If correct answer contains commas, treat both sides as unordered sets of parts.
 function compareAnswers(userAns, correctAns) {
   const u = normalizeAnswer(userAns);
   const c = normalizeAnswer(correctAns);
@@ -42,148 +37,20 @@ function compareAnswers(userAns, correctAns) {
     const userParts = u.split(",").map(s => s.trim()).filter(Boolean);
     const correctParts = c.split(",").map(s => s.trim()).filter(Boolean);
     if (userParts.length !== correctParts.length) return false;
-
-    // unordered exact match on normalized parts
     const userSet = new Set(userParts);
     for (const p of correctParts) {
       if (!userSet.has(p)) return false;
     }
     return true;
   }
-
-  // single token/phrase exact match after normalization
   return u === c;
 }
 
-/* -------------------- attempts helpers (NEW) -------------------- */
-function maxAttemptsForType(type) {
-  return (String(type).toLowerCase() === "mcq") ? MAX_ATTEMPTS_MCQ : MAX_ATTEMPTS_TEXT;
-}
-
-/* ------------------------------------------------------------------ */
-/*                              HELPERS                                */
-/* ------------------------------------------------------------------ */
-
-// A cell is "completed" if solved OR attempts exhausted (using per-type max)
-async function teamCompletedAllCells(teamId, section) {
-  const [responses, assigns] = await Promise.all([
-    TeamResponse.find({ team: teamId, section }, { attempts: 1, isCorrect: 1, cell: 1 }).lean(),
-    SectionGridAssignment.find({ team: teamId, section }, { cell: 1, question: 1 }).lean(),
-  ]);
-
-  // map cell -> type
-  const qById = new Map();
-  if (assigns.length) {
-    const qIds = assigns.map(a => a.question);
-    const qs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
-    for (const q of qs) qById.set(String(q._id), q);
-  }
-  const typeByCell = new Map();
-  for (const a of assigns) {
-    const q = qById.get(String(a.question));
-    typeByCell.set(a.cell, q?.type || "text");
-  }
-
-  let completed = 0;
-  for (let cell = 0; cell < 6; cell++) {
-    const r = responses.find(x => x.cell === cell);
-    const type = typeByCell.get(cell) || "text";
-    const maxA = maxAttemptsForType(type);
-    if (r?.isCorrect || ((r?.attempts || 0) >= maxA)) completed++;
-  }
-  return completed >= 6;
-}
-
-async function ensureSectionTimer(teamId, section) {
-  let existing = await TeamSectionTimer.findOne({ team: teamId, section });
-  if (existing) return existing;
-
-  const unlocked = await teamCompletedAllCells(teamId, section);
-  if (!unlocked) return null;
-
-  return await TeamSectionTimer.create({
-    team: teamId,
-    section,
-    startedAt: new Date(),
-    durationSec: 20 * 60,
-  });
-}
-
-function computeRemainingSeconds(timerDoc) {
-  if (!timerDoc) return null;
-  if (timerDoc.stoppedAt) return null;
-  const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
-  return Math.max(0, timerDoc.durationSec - elapsed);
-}
-
-// A section is completed when its single meta-question is solved
-async function sectionCompleted(teamId, section) {
-  const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
-  return solved >= 1;
-}
-
-// Is a section completed OR expired (timer over)?
-async function sectionCompletedOrExpired(teamId, section) {
-  if (await sectionCompleted(teamId, section)) return true;
-
-  const timer = await TeamSectionTimer.findOne({ team: teamId, section });
-  if (!timer) return false;
-
-  if (timer.stoppedAt) return true;
-
-  const remaining = computeRemainingSeconds(timer);
-  return remaining === 0;
-}
-
-// Unlock next section when previous is completed OR expired
-async function computeUnlockedSection(teamId) {
-  let unlocked = 1;
-  if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
-  if (await sectionCompletedOrExpired(teamId, 2)) unlocked = 3;
-  return unlocked;
-}
-
-/* -------------------- Run timing helpers (NEW) -------------------- */
-
-// Ensure runStartedAt is set the first time the team hits the quiz.
-async function ensureRunStarted(teamId) {
-  const t = await Team.findById(teamId).select("runStartedAt").lean();
-  if (!t?.runStartedAt) {
-    await Team.findByIdAndUpdate(teamId, { runStartedAt: new Date() });
-  }
-}
-
-// Have they SOLVED all three section questions?
-async function allSectionsCompleted(teamId) {
-  const [s1, s2, s3] = await Promise.all([
-    sectionCompleted(teamId, 1),
-    sectionCompleted(teamId, 2),
-    sectionCompleted(teamId, 3),
-  ]);
-  return s1 && s2 && s3;
-}
-
-// If all sections are completed and finish not yet recorded, write final time.
-async function finalizeRunIfDone(teamId) {
-  const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
-  if (!team) return;
-
-  if (team.runFinishedAt) return;              // already finalized
-  if (!team.runStartedAt) return;              // no start yet
-
-  const done = await allSectionsCompleted(teamId);
-  if (!done) return;
-
-  const now = new Date();
-  const total = Math.max(0, Math.floor((now - new Date(team.runStartedAt)) / 1000));
-  await Team.findByIdAndUpdate(teamId, {
-    runFinishedAt: now,
-    runTotalTimeSec: total,
-  });
+function getMaxAttempts(type) {
+  return type === "mcq" ? MAX_ATTEMPTS_MCQ : MAX_ATTEMPTS_TEXT;
 }
 
 /* -------------------- IMAGE URL HELPERS -------------------- */
-// Full composite per section — prefer DB value; fallback to defaults
 async function compositeImageUrl(section) {
   const meta = await SectionMeta.findOne({ section }).lean();
   if (meta?.compositeImageUrl) return meta.compositeImageUrl;
@@ -193,7 +60,6 @@ async function compositeImageUrl(section) {
   return "/images/section1.png";
 }
 
-// Tile image for a given section/cell (cell is 0..5 → file suffix 1..6)
 function tileImageUrl(section, cell) {
   const idx = Number(cell) + 1; // 1..6
   return `/images/section${section}.${idx}.png`;
@@ -207,13 +73,11 @@ function pickN(arr, n, excludeIds = new Set()) {
   const filtered = arr.filter((x) => !excludeIds.has(String(x._id)));
   for (let i = filtered.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    // fixed swap
     [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
   }
   return filtered.slice(0, Math.max(0, n));
 }
 
-// Prompt pools (kept outside to reuse in both paths)
 const firstSetPrompts = [
   "What is the key difference between an energy signal and a power signal based on the definitions?",
   "Determine whether it is periodic and find the fundamental time period. x(t) = cos²(2πt)",
@@ -253,12 +117,10 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     SectionGridAssignment.find({ team: teamId, section: { $ne: section } }).lean(),
   ]);
 
-  // prevent duplicates across sections
   const usedInOtherSections = new Set(
     otherSectionAssigns.map((a) => String(a.question))
   );
 
-  // If 6 exist, verify no duplicates & no dangling questions
   if (existing.length === 6) {
     const questionIds = existing.map((a) => a.question);
     const found = await GridQuestion.find({ _id: { $in: questionIds } }, { _id: 1 }).lean();
@@ -269,7 +131,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     );
     if (offenders.length === 0) return existing;
 
-    // Build pools
     const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
       GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
       GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
@@ -306,7 +167,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     return await Promise.all(updates);
   }
 
-  // Build new 6 with the required composition (3/2/1) and no cross-section duplicates
   const [firstSet, secondSet, lastSet, wholePool] = await Promise.all([
     GridQuestion.find({ prompt: { $in: firstSetPrompts } }).lean(),
     GridQuestion.find({ prompt: { $in: secondSetPrompts } }).lean(),
@@ -330,7 +190,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
     chosen = [...chosen, ...topUp];
   }
 
-  // shuffle and save
   for (let i = chosen.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
@@ -347,13 +206,155 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 }
 
 /* ------------------------------------------------------------------ */
+/*                              HELPERS                                */
+/* ------------------------------------------------------------------ */
+
+// Map cell -> question type for a team+section
+async function getSectionCellTypes(teamId, section) {
+  const assigns = await SectionGridAssignment.find({ team: teamId, section }).lean();
+  if (!assigns.length) return new Map();
+  const qIds = assigns.map(a => a.question);
+  const qDocs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
+  const typeById = new Map(qDocs.map(q => [String(q._id), q.type || "text"]));
+  const map = new Map();
+  for (const a of assigns) {
+    map.set(a.cell, typeById.get(String(a.question)) || "text");
+  }
+  return map;
+}
+
+// A cell is "completed" if solved OR attempts exhausted (with per-type attempt limit)
+async function teamCompletedAllCells(teamId, section) {
+  const [typesByCell, responses] = await Promise.all([
+    getSectionCellTypes(teamId, section),
+    TeamResponse.find(
+      { team: teamId, section },
+      { cell: 1, attempts: 1, isCorrect: 1 }
+    ).lean(),
+  ]);
+
+  const rByCell = new Map(responses.map(r => [r.cell, r]));
+  let completed = 0;
+  for (let cell = 0; cell < 6; cell++) {
+    const qt = typesByCell.get(cell) || "text";
+    const max = getMaxAttempts(qt);
+    const r = rByCell.get(cell);
+    const attempts = r?.attempts || 0;
+    const solved = !!r?.isCorrect;
+    if (solved || attempts >= max) completed++;
+  }
+  return completed >= 6;
+}
+
+async function ensureSectionTimer(teamId, section) {
+  let existing = await TeamSectionTimer.findOne({ team: teamId, section });
+  if (existing) return existing;
+
+  const unlocked = await teamCompletedAllCells(teamId, section);
+  if (!unlocked) return null;
+
+  return await TeamSectionTimer.create({
+    team: teamId,
+    section,
+    startedAt: new Date(),
+    durationSec: 20 * 60,
+  });
+}
+
+function computeRemainingSeconds(timerDoc) {
+  if (!timerDoc) return null;
+  if (timerDoc.stoppedAt) return null;
+  const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
+  return Math.max(0, timerDoc.durationSec - elapsed);
+}
+
+// A section is completed when its single meta-question is solved
+async function sectionCompleted(teamId, section) {
+  const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
+  return solved >= 1;
+}
+
+async function sectionCompletedOrExpired(teamId, section) {
+  if (await sectionCompleted(teamId, section)) return true;
+
+  const timer = await TeamSectionTimer.findOne({ team: teamId, section });
+  if (!timer) return false;
+
+  if (timer.stoppedAt) return true;
+
+  const remaining = computeRemainingSeconds(timer);
+  return remaining === 0;
+}
+
+async function computeUnlockedSection(teamId) {
+  let unlocked = 1;
+  if (await sectionCompletedOrExpired(teamId, 1)) unlocked = 2;
+  if (await sectionCompletedOrExpired(teamId, 2)) unlocked = 3;
+  return unlocked;
+}
+
+/* -------------------- Run timing helpers (UPDATED) -------------------- */
+
+// Ensure runStartedAt is set the first time the team hits the quiz.
+// If the DB was cleared but the team document still has a finished run,
+// reset timing fields and start a fresh run.
+async function ensureRunStarted(teamId) {
+  const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
+  const [gridCount, sectionCount] = await Promise.all([
+    TeamResponse.countDocuments({ team: teamId }),
+    TeamSectionResponse.countDocuments({ team: teamId }),
+  ]);
+  const hasAnyResponses = gridCount > 0 || sectionCount > 0;
+
+  // Fresh DB (no responses) but team doc shows a finished/started run -> reset for new run
+  if (!hasAnyResponses && (team?.runFinishedAt || team?.runStartedAt)) {
+    await Team.findByIdAndUpdate(teamId, {
+      runStartedAt: new Date(),
+      runFinishedAt: null,
+      runTotalTimeSec: null,
+    });
+    return;
+  }
+
+  // First ever visit: set start time
+  if (!team?.runStartedAt) {
+    await Team.findByIdAndUpdate(teamId, { runStartedAt: new Date() });
+  }
+}
+
+async function allSectionsCompleted(teamId) {
+  const [s1, s2, s3] = await Promise.all([
+    sectionCompleted(teamId, 1),
+    sectionCompleted(teamId, 2),
+    sectionCompleted(teamId, 3),
+  ]);
+  return s1 && s2 && s3;
+}
+
+async function finalizeRunIfDone(teamId) {
+  const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
+  if (!team) return;
+  if (team.runFinishedAt) return;
+  if (!team.runStartedAt) return;
+
+  const done = await allSectionsCompleted(teamId);
+  if (!done) return;
+
+  const now = new Date();
+  const total = Math.max(0, Math.floor((now - new Date(team.runStartedAt)) / 1000));
+  await Team.findByIdAndUpdate(teamId, {
+    runFinishedAt: now,
+    runTotalTimeSec: total,
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*                           GRID SECTION API                          */
 /* ------------------------------------------------------------------ */
 
 export async function getSections(req, res) {
   const teamId = req.team._id;
 
-  // NEW: mark run start
   await ensureRunStarted(teamId);
 
   await Promise.all([
@@ -362,51 +363,52 @@ export async function getSections(req, res) {
     ensureAssignmentsForTeamSection(teamId, 3),
   ]);
 
-  // Preload all assignments and their questions for performance
-  const [as1, as2, as3] = await Promise.all([
+  const [assign1, assign2, assign3] = await Promise.all([
     SectionGridAssignment.find({ team: teamId, section: 1 }).lean(),
     SectionGridAssignment.find({ team: teamId, section: 2 }).lean(),
     SectionGridAssignment.find({ team: teamId, section: 3 }).lean(),
   ]);
-  const allAssigns = [...as1, ...as2, ...as3];
-  const qIds = allAssigns.map(a => a.question);
-  const qDocs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
-  const qById = new Map(qDocs.map(q => [String(q._id), q]));
 
   const responses = await TeamResponse.find({ team: teamId }).lean();
   const rMap = new Map(responses.map((r) => [`${r.section}:${r.cell}`, r]));
 
-  const buildSection = async (secId) => {
+  const buildSection = async (secId, assigns) => {
     const compUrl = await compositeImageUrl(secId);
-    const assigns = secId === 1 ? as1 : secId === 2 ? as2 : as3;
 
-    const cells = Array.from({ length: 6 }, (_, cell) => {
-      const r = rMap.get(`${secId}:${cell}`);
-      const assign = assigns.find(a => a.cell === cell);
-      const q = assign ? qById.get(String(assign.question)) : null;
-      const type = q?.type || "text";
-      const maxA = maxAttemptsForType(type);
-      const attempts = r?.attempts || 0;
-      const solved = !!r?.isCorrect;
-      const attemptsLeft = Math.max(0, maxA - attempts);
-      const reveal = solved || attemptsLeft === 0;
+    const qIds = assigns.map(a => a.question);
+    const qDocs = await GridQuestion.find({ _id: { $in: qIds } }, { _id: 1, type: 1 }).lean();
+    const typeById = new Map(qDocs.map(q => [String(q._id), q.type || "text"]));
 
-      return {
-        cell,
-        answered: solved,
-        attemptsLeft,
-        maxAttempts: maxA, // NEW
-        imageUrl: reveal ? tileImageUrl(secId, cell) : "",
-      };
-    });
+    const cells = assigns
+      .sort((a, b) => a.cell - b.cell)
+      .map((a) => {
+        const r = rMap.get(`${secId}:${a.cell}`);
+        const solved = !!r?.isCorrect;
+        const attempts = r?.attempts || 0;
+        const qType = typeById.get(String(a.question)) || "text";
+        const max = getMaxAttempts(qType);
+        const attemptsLeft = Math.max(0, max - attempts);
+        const reveal = solved || attemptsLeft === 0;
+
+        return {
+          cell: a.cell,
+          answered: solved,
+          attemptsLeft,
+          attemptsMax: max,
+          imageUrl: reveal ? tileImageUrl(secId, a.cell) : "",
+        };
+      });
 
     return { id: secId, cells, compositeImageUrl: compUrl };
   };
 
-  const [s1, s2, s3] = await Promise.all([buildSection(1), buildSection(2), buildSection(3)]);
+  const [s1, s2, s3] = await Promise.all([
+    buildSection(1, assign1),
+    buildSection(2, assign2),
+    buildSection(3, assign3),
+  ]);
   const unlockedSection = await computeUnlockedSection(teamId);
 
-  // NEW: if all sections SOLVED, finalize total time
   await finalizeRunIfDone(teamId);
 
   res.json({ sections: [s1, s2, s3], unlockedSection });
@@ -430,7 +432,7 @@ export async function getQuestion(req, res) {
   const attempts = r?.attempts || 0;
   const solved = !!r?.isCorrect;
 
-  const maxAttempts = maxAttemptsForType(qDoc.type);
+  const maxAttempts = getMaxAttempts(qDoc.type);
 
   res.json({
     section,
@@ -440,7 +442,6 @@ export async function getQuestion(req, res) {
     options: qDoc.options || [],
     imageUrl: qDoc.imageUrl || "",
     attemptsLeft: Math.max(0, maxAttempts - attempts),
-    maxAttempts, // NEW
     solved
   });
 }
@@ -461,27 +462,24 @@ export async function submitAnswer(req, res) {
   const qDoc = await GridQuestion.findById(assign.question).lean();
   if (!qDoc) return res.status(404).json({ error: "Question not found" });
 
-  const maxAttempts = maxAttemptsForType(qDoc.type);
-
   let tr = await TeamResponse.findOne({ team: teamId, section, cell });
 
   if (tr?.isCorrect) {
     return res.json({
       correct: true,
       alreadySolved: true,
-      attemptsLeft: Math.max(0, maxAttempts - (tr.attempts || 0)),
-      maxAttempts, // NEW
+      attemptsLeft: Math.max(0, getMaxAttempts(qDoc.type) - (tr.attempts || 0)),
       imageUrl: tileImageUrl(section, cell)
     });
   }
 
+  const maxAttempts = getMaxAttempts(qDoc.type);
   const currentAttempts = tr?.attempts || 0;
 
   if (currentAttempts >= maxAttempts) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      maxAttempts, // NEW
       imageUrl: tileImageUrl(section, cell)
     });
   }
@@ -495,7 +493,6 @@ export async function submitAnswer(req, res) {
     );
     isCorrect = !!match && normalize(qDoc.correctAnswer) === normalize(match.key);
   } else {
-    // robust free-text check for grid questions
     isCorrect = compareAnswers(answer, qDoc.correctAnswer);
   }
 
@@ -506,14 +503,12 @@ export async function submitAnswer(req, res) {
     { new: true, upsert: true }
   );
 
-  // scoring
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: GRID_POINTS_CORRECT } });
   } else if (qDoc.type === "mcq") {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: -GRID_PENALTY_WRONG_MCQ } });
   }
 
-  // unlock timer if grid fully revealed
   const completed = await teamCompletedAllCells(teamId, section);
   if (completed) {
     await ensureSectionTimer(teamId, section);
@@ -525,7 +520,6 @@ export async function submitAnswer(req, res) {
   return res.json({
     correct: isCorrect,
     attemptsLeft,
-    maxAttempts, // NEW
     imageUrl: revealImage ? tileImageUrl(section, cell) : ""
   });
 }
@@ -577,12 +571,10 @@ export async function getSectionQuestions(req, res) {
       idx: q.idx,
       prompt: q.prompt,
       solved: !!r?.isCorrect,
-      attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - attempts), // meta uses TEXT limit (5)
-      maxAttempts: MAX_ATTEMPTS_TEXT, // NEW (explicit)
+      attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - attempts)
     };
   });
 
-  // NEW: if after fetching, all sections solved, finalize time.
   await finalizeRunIfDone(teamId);
 
   res.json({
@@ -600,7 +592,6 @@ export async function submitSectionAnswer(req, res) {
   const idx = Number(req.body.idx);
   const answer = req.body.answer;
 
-  // Single question per section (idx MUST be 0)
   if (![1,2,3].includes(section) || idx !== 0 || !answer) {
     return res.status(400).json({ error: "Invalid payload" });
   }
@@ -625,18 +616,16 @@ export async function submitSectionAnswer(req, res) {
   let tr = await TeamSectionResponse.findOne({ team: teamId, section, idx });
 
   const currentAttempts = tr?.attempts || 0;
-  const maxAttempts = MAX_ATTEMPTS_TEXT; // meta (text) questions = 5
-
   if (tr?.isCorrect) {
     return res.json({
       correct: true,
       alreadySolved: true,
-      attemptsLeft: Math.max(0, maxAttempts - currentAttempts),
+      attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - currentAttempts),
       remainingSeconds,
       completed: await sectionCompleted(teamId, section)
     });
   }
-  if (currentAttempts >= maxAttempts) {
+  if (currentAttempts >= MAX_ATTEMPTS_TEXT) {
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
@@ -646,7 +635,6 @@ export async function submitSectionAnswer(req, res) {
   }
 
   const attempts = currentAttempts + 1;
-  // robust free-text comparison for section meta Q
   const isCorrect = compareAnswers(answer, q.answer);
 
   tr = await TeamSectionResponse.findOneAndUpdate(
@@ -658,7 +646,6 @@ export async function submitSectionAnswer(req, res) {
   if (isCorrect) {
     await Team.findByIdAndUpdate(teamId, { $inc: { points: SECTION_POINTS_CORRECT } });
 
-    // Stop timer as soon as the ONLY section question is solved
     const solvedCount = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
     if (solvedCount >= 1) {
       await TeamSectionTimer.findOneAndUpdate(
@@ -667,7 +654,6 @@ export async function submitSectionAnswer(req, res) {
       );
     }
 
-    // If this was section 3 (last), and now all sections solved → finalize total time
     if (section === 3) {
       await finalizeRunIfDone(teamId);
     }
@@ -678,7 +664,7 @@ export async function submitSectionAnswer(req, res) {
 
   return res.json({
     correct: isCorrect,
-    attemptsLeft: Math.max(0, maxAttempts - attempts),
+    attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - attempts),
     remainingSeconds: nowRemaining,
     completed: completedNow
   });
