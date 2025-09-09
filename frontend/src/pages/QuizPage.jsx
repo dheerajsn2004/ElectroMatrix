@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
+import BreakConnectionButton from "../components/BreakConnectionButton";
 
 /* --------------------- small helpers --------------------- */
 function shallowEqual(a, b) {
@@ -112,7 +113,8 @@ function QuestionModal({
             </span>
             {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
           </div>
-
+          {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
+          <br></br>
           {type === "mcq" ? (
             <div className="space-y-2">
               {(options || []).map((o) => (
@@ -149,8 +151,6 @@ function QuestionModal({
               disabled={disabled || loading}
             />
           )}
-
-          {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
         </div>
 
         {/* Footer stays pinned */}
@@ -242,10 +242,15 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         <button
           onClick={submit}
           disabled={disabled || submitting}
-          className={`w-full md:w-auto px-4 py-3 rounded-lg ${disabled ? "bg-gray-700 cursor-not-allowed" : "bg-teal-600 hover:bg-teal-500"}`}
+          className={`w-full md:w-auto px-4 py-3 rounded-lg font-semibold transition ${
+            disabled
+              ? "bg-gray-700 cursor-not-allowed text-gray-400"
+              : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+          }`}
         >
           {submitting ? "Submitting…" : "Submit"}
         </button>
+
       </div>
       {err && <div className="mt-2 text-sm text-red-400">{err}</div>}
     </div>
@@ -447,15 +452,56 @@ export default function QuizPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-teal-400">ElectroMatrix – Quiz</h1>
+  <h1
+    className="text-2xl sm:text-3xl font-bold tracking-wide"
+    style={{
+      color: (() => {
+        const solvedSections = sections.filter((s) =>
+          s.cells.every((c) => Boolean(c.imageUrl))
+        ).length;
+
+        switch (solvedSections) {
+          case 0:
+            return "#9aa6b2"; // initial gray
+          case 1:
+            return "#c0c8d0"; // very slight white
+          case 2:
+            return "#e0e8f0"; // brighter white
+          case 3:
+            return "#ffffff"; // fully bright white
+          default:
+            return "#9aa6b2";
+        }
+      })(),
+      textShadow: (() => {
+        const solvedSections = sections.filter((s) =>
+          s.cells.every((c) => Boolean(c.imageUrl))
+        ).length;
+
+        switch (solvedSections) {
+          case 0:
+            return "0 0 4px rgba(0,245,255,0.3)";
+          case 1:
+            return "0 0 8px rgba(0,245,255,0.5)";
+          case 2:
+            return "0 0 12px rgba(0,245,255,0.7)";
+          case 3:
+            return "0 0 20px rgba(0,245,255,1)";
+          default:
+            return "0 0 4px rgba(0,245,255,0.3)";
+        }
+      })(),
+      transition: "color 1s ease-in-out, text-shadow 1s ease-in-out",
+    }}
+  >
+    ElectroMatrix – Quiz
+  </h1>
+
+
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
-            {/* <button
-              onClick={() => { localStorage.removeItem("team"); localStorage.removeItem("activeSection"); navigate("/login"); }}
-              className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700"
-            >
-              Logout
-            </button> */}
+<BreakConnectionButton message="Don’t give up! Each try brings you closer to success." />
+
           </div>
         </header>
 
