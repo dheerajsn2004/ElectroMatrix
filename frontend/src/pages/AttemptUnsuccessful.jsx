@@ -1,12 +1,9 @@
 import React from "react";
- // CSS file for this page
-
 export default function AttemptUnsuccessful() {
   return (
     <section
       className="page-shell text-center relative min-h-screen flex items-center justify-center"
       style={{
-        backgroundImage: `url('/Failure.png')`, // Dark, subtle background
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
