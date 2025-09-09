@@ -1,6 +1,4 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Kelly+Slab&display=swap');
 
 
@@ -58,39 +56,12 @@
   letter-spacing: 0.1em;
 }
 
-.rajdhani-light {
-  font-family: "Rajdhani", sans-serif;
-  font-weight: 300;
-  font-style: normal;
-}
 
-.rajdhani-regular {
-  font-family: "Rajdhani", sans-serif;
-  font-weight: 400;
-  font-style: normal;
-}
 
-.rajdhani-medium {
-  font-family: "Rajdhani", sans-serif;
-  font-weight: 500;
-  font-style: normal;
-}
-
-.rajdhani-semibold {
-  font-family: "Rajdhani", sans-serif;
-  font-weight: 600;
-  font-style: normal;
-}
-
-.rajdhani-bold {
-  font-family: "Rajdhani", sans-serif;
-  font-weight: 700;
-  font-style: normal;
-}
 
 .kelly-slab-regular {
   font-family: "Kelly Slab", sans-serif;
-  font-weight: 500;
+  font-weight: 400;
   font-style: normal;
 }
 
@@ -101,6 +72,7 @@ h1 {
   font-style: normal;
   font-size: 3rem; /* adjust as needed */
 }
+
 @keyframes dyingNeon {
   0% {
     color: #00f5ff;
@@ -110,7 +82,7 @@ h1 {
       0 0 18px rgba(0, 245, 255, 0.3);
   }
 
-  /* Aggressive flicker for first 0.7s (~30% of 2.3s animation) */
+  /* Aggressive flicker (first 0.7s of 2.3s ≈ 30%) */
   5%, 12%, 20%, 28% {
     color: #A0A0A0;
     text-shadow: none;
@@ -123,14 +95,46 @@ h1 {
       0 0 18px rgba(0, 245, 255, 0.3);
   }
 
-  /* Smooth transition to dead grey after flicker */
+  /* Hold final glow briefly before fading */
+  40% {
+    color: #00f5ff;
+    text-shadow:
+      0 0 4px rgba(0, 245, 255, 0.6),
+      0 0 10px rgba(0, 245, 255, 0.4),
+      0 0 18px rgba(0, 245, 255, 0.2);
+  }
+
+  /* Smooth fade to grey */
+  55% {
+    color: #7f9ea0; /* intermediate dim cyan */
+    text-shadow:
+      0 0 2px rgba(0, 245, 255, 0.2),
+      0 0 6px rgba(0, 245, 255, 0.1);
+  }
+
   70%, 100% {
-    color: #A0A0A0;
+    color: #A0A0A0; /* final dead grey */
     text-shadow: none;
   }
 }
 
 .dying-neon {
-  animation: dyingNeon 2.3s ease-in-out forwards;
+  animation: dyingNeon 2.6s ease-in-out forwards;
 }
+/* Fade-in for mission text */
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeInDelayed {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fadeIn 1s ease forwards;
+  animation-delay: 2.6s; /* matches dyingNeon */
+}
+
+
 
