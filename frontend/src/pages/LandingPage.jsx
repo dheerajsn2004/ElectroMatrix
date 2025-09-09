@@ -24,20 +24,41 @@ export default function LandingPage() {
 
   {/* Rest of text (fades in after flicker) */}
   <div className="animate-fadeInDelayed mt-8 max-w-3xl">
-    <p className="text-xl sm:text-3xl text-gray-300/90 tracking-wide">
-      🌑 The city is in darkness. The ElectroMatrix has gone silent.  
-      And only you can bring it back.
+   {/* Heroic Intro */}
+    <p className="text-xl sm:text-2xl text-white tracking-wide text-center font-semibold kelly-slab-regular">
+      So, you dared…
     </p>
 
-    <p className="mt-6 text-base sm:text-lg text-gray-400 leading-8">
-      The grids are fractured. Signals are lost. Circuits are unstable.  
-      Every puzzle you solve reignites the city’s heartbeat.  
-      Step in, restore the layers, and awaken the ElectroMatrix.  
-      The city is waiting. Its revival depends on you — are you ready to spark it to life?
+    <p className="mt-2 text-lg sm:text-xl text-gray-200 font-semibold text-center leading-snug">
+      Welcome! Neovatra has been waiting for its heroes.
     </p>
 
-    <button onClick={() => navigate("/login")} className="btn-primary mt-10">
-      Get Started <span className="text-2xl leading-none">→</span>
+    {/* The Blackout */}
+    <p className="mt-4 text-sm sm:text-base text-gray-400 leading-6 sm:leading-7">
+      The ElectroMatrix, the city’s power backbone, has failed. Critical data is lost!  
+      The blackout holds strong.
+    </p>
+
+    {/* Mission */}
+    <p className="mt-3 text-sm sm:text-base text-gray-400 leading-6 sm:leading-7">
+      Your mission is simple and brutal: dive into each grid, restore the correct information, and unlock the layer.  
+      After each unlock, analyze the network and fully repair that layer.
+    </p>
+
+    <p className="mt-3 text-sm sm:text-base text-gray-400 leading-6 sm:leading-7">
+      Three layers stand in your way!
+    </p>
+
+    {/* Call to Action */}
+    <p className="mt-4 text-sm sm:text-base text-gray-100 font-medium leading-6 sm:leading-7">
+      The city has placed its trust in you.  
+      Revive it… if you can.
+    </p>
+
+
+
+    <button onClick={() => navigate("/login")} className="btn-primary px-4 py-2 mt-6 text-sm sm:text-base">
+      Get Started <span className="text-xl leading-none">→</span>
     </button>
   </div>
 </div>

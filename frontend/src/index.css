@@ -182,11 +182,11 @@ h1 {
 
   /* Final stable white glow */
   60%, 100% {
-    color: #ffffff;
+    color: #ffffffeb;
     text-shadow:
-      0 0 8px rgba(255, 255, 255, 0.9),
-      0 0 20px rgba(255, 255, 255, 0.6),
-      0 0 40px rgba(255, 255, 255, 0.4);
+       0 0 8px rgb(255, 255, 255),
+      0 0 20px rgba(255, 255, 255, 0.466),
+      0 0 40px rgba(255, 255, 255, 0.126);
   }
 }
 
