@@ -10,15 +10,11 @@ const teamSchema = new mongoose.Schema(
     // Progression lock (1..3)
     unlockedSection: { type: Number, default: 1 },
 
-    // ────────────────────────────────────────────────────────────────
     // Run timing fields:
-    // We set runStartedAt the first time the team opens the quiz (getSections),
-    // and we set runFinishedAt + runTotalTimeSec once ALL THREE sections
-    // (their single meta-question each) are solved.
-    // ────────────────────────────────────────────────────────────────
-    runStartedAt:   { type: Date },           // when the team began the run
-    runFinishedAt:  { type: Date },           // when they completed section 3 question
-    runTotalTimeSec:{ type: Number },         // (runFinishedAt - runStartedAt) in seconds
+    // We keep runStartedAt to scope data to the *current run* and
+    // runFinishedAt to mark completion, but we do NOT store total time.
+    runStartedAt:   { type: Date },  // when the team began the run
+    runFinishedAt:  { type: Date },  // when they completed section 3 question
   },
   { timestamps: true }
 );
