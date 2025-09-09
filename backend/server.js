@@ -21,12 +21,7 @@ const PORT = process.env.PORT || 5000;
 app.use("/images", express.static(path.join(__dirname, "public/images")));
 
 // ✅ Allow requests from your local frontend
-app.use(
-  cors({
-    origin: ["http://localhost:5173"], // your local React dev server
-    credentials: true,
-  })
-);
+app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || ["https://electro-matrix.vercel.app"] }));
 
 app.use(express.json());
 
@@ -53,3 +48,4 @@ app.use(errorHandler);
     process.exit(1);
   }
 })();
+
