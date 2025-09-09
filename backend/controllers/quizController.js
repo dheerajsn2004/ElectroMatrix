@@ -268,17 +268,37 @@ function computeRemainingSeconds(timerDoc) {
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
 
-// A section is completed when its single meta-question is solved
+/* -------------------- RUN-SCOPED GUARDS (NEW) -------------------- */
+
+// Consider a doc as part of the current run only if its timestamp is >= runStartedAt
+function isFromCurrentRun(date, runStartedAt) {
+  if (!date || !runStartedAt) return false;
+  return new Date(date).getTime() >= new Date(runStartedAt).getTime();
+}
+
+// A section is completed when its single meta-question is solved IN THIS RUN
 async function sectionCompleted(teamId, section) {
-  const solved = await TeamSectionResponse.countDocuments({ team: teamId, section, isCorrect: true });
-  return solved >= 1;
+  const team = await Team.findById(teamId).select("runStartedAt").lean();
+  if (!team?.runStartedAt) return false;
+
+  const rs = await TeamSectionResponse.find(
+    { team: teamId, section, isCorrect: true },
+    { answeredAt: 1 }
+  ).lean();
+
+  return rs.some(r => isFromCurrentRun(r.answeredAt, team.runStartedAt));
 }
 
 async function sectionCompletedOrExpired(teamId, section) {
+  // Completed (this run)?
   if (await sectionCompleted(teamId, section)) return true;
 
-  const timer = await TeamSectionTimer.findOne({ team: teamId, section });
-  if (!timer) return false;
+  const team = await Team.findById(teamId).select("runStartedAt").lean();
+  if (!team?.runStartedAt) return false;
+
+  // Only consider a timer that belongs to the current run
+  const timer = await TeamSectionTimer.findOne({ team: teamId, section }).lean();
+  if (!timer || !isFromCurrentRun(timer.startedAt, team.runStartedAt)) return false;
 
   if (timer.stoppedAt) return true;
 
@@ -296,29 +316,43 @@ async function computeUnlockedSection(teamId) {
 /* -------------------- Run timing helpers (UPDATED) -------------------- */
 
 // Ensure runStartedAt is set the first time the team hits the quiz.
-// If the DB was cleared but the team document still has a finished run,
-// reset timing fields and start a fresh run.
+// If the DB is "fresh" (no responses) but the team document still has an old run,
+// reset timing fields AND purge old timers/responses for a truly fresh run.
 async function ensureRunStarted(teamId) {
   const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
+
   const [gridCount, sectionCount] = await Promise.all([
     TeamResponse.countDocuments({ team: teamId }),
     TeamSectionResponse.countDocuments({ team: teamId }),
   ]);
   const hasAnyResponses = gridCount > 0 || sectionCount > 0;
 
-  // Fresh DB (no responses) but team doc shows a finished/started run -> reset for new run
+  // Fresh DB for this team (no answers recorded) but team has run markers -> reset fully
   if (!hasAnyResponses && (team?.runFinishedAt || team?.runStartedAt)) {
+    await Promise.all([
+      TeamSectionTimer.deleteMany({ team: teamId }),       // clear old timers
+      TeamSectionResponse.deleteMany({ team: teamId }),    // clear old section answers
+      TeamResponse.deleteMany({ team: teamId }),           // safety: clear any grid answers
+    ]);
+
     await Team.findByIdAndUpdate(teamId, {
       runStartedAt: new Date(),
       runFinishedAt: null,
       runTotalTimeSec: null,
+      unlockedSection: 1,   // optional: reset progression
+      points: 0,            // optional: reset score
     });
     return;
   }
 
-  // First ever visit: set start time
+  // First ever visit or continuing an existing run
   if (!team?.runStartedAt) {
-    await Team.findByIdAndUpdate(teamId, { runStartedAt: new Date() });
+    await Team.findByIdAndUpdate(teamId, {
+      runStartedAt: new Date(),
+      runFinishedAt: null,
+      runTotalTimeSec: null,
+      unlockedSection: 1,   // optional
+    });
   }
 }
 
@@ -547,8 +581,12 @@ export async function getSectionQuestions(req, res) {
   }
 
   const timer = await ensureSectionTimer(teamId, section);
-  const remainingSeconds = computeRemainingSeconds(timer);
-  const expired = remainingSeconds === 0;
+
+  // Only compute remaining if timer belongs to current run
+  const team = await Team.findById(teamId).select("runStartedAt").lean();
+  const timerBelongsToRun = timer && isFromCurrentRun(timer.startedAt, team?.runStartedAt);
+  const remainingSeconds = timerBelongsToRun ? computeRemainingSeconds(timer) : null;
+  const expired = timerBelongsToRun ? remainingSeconds === 0 : false;
 
   if (expired && timer && !timer.stoppedAt) {
     await TeamSectionTimer.findOneAndUpdate(
@@ -567,10 +605,14 @@ export async function getSectionQuestions(req, res) {
   const questions = qs.map(q => {
     const r = rMap.get(q.idx);
     const attempts = r?.attempts || 0;
+
+    // Only mark solved if this answer is from the current run
+    const solved = !!(r?.isCorrect && isFromCurrentRun(r?.answeredAt, team?.runStartedAt));
+
     return {
       idx: q.idx,
       prompt: q.prompt,
-      solved: !!r?.isCorrect,
+      solved,
       attemptsLeft: Math.max(0, MAX_ATTEMPTS_TEXT - attempts)
     };
   });
@@ -598,6 +640,12 @@ export async function submitSectionAnswer(req, res) {
 
   const timer = await ensureSectionTimer(teamId, section);
   if (!timer) return res.status(403).json({ error: "Section challenge locked" });
+
+  // Timer must be from the current run
+  const team = await Team.findById(teamId).select("runStartedAt").lean();
+  if (!isFromCurrentRun(timer.startedAt, team?.runStartedAt)) {
+    return res.status(403).json({ error: "Section challenge locked" });
+  }
 
   const remainingSeconds = computeRemainingSeconds(timer);
   if (remainingSeconds === 0) {
