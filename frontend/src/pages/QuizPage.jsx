@@ -154,7 +154,21 @@ function QuestionModal({
         </div>
 
         {/* Footer stays pinned */}
+
         <div className="px-5 sm:px-6 py-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3 sm:justify-end">
+
+          <button
+  onClick={handleSubmit}
+  className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition ${
+    disabled
+      ? "bg-gray-700 cursor-not-allowed text-gray-400"
+      : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+  }`}
+  disabled={disabled || loading}
+>
+  {loading ? "Submitting…" : "Submit"}
+</button>
+
           <button
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
@@ -162,17 +176,9 @@ function QuestionModal({
           >
             Close
           </button>
-          <button
-            onClick={handleSubmit}
-            className={`w-full sm:w-auto px-4 py-2 rounded-lg ${
-              disabled
-                ? "bg-gray-700 cursor-not-allowed"
-                : "bg-gradient-to-r from-teal-500 to-green-600 hover:opacity-90"
-            }`}
-            disabled={disabled || loading}
-          >
-            {loading ? "Submitting…" : "Submit"}
-          </button>
+
+
+
         </div>
       </div>
     </div>

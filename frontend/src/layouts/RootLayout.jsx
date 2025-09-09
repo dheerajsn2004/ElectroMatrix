@@ -18,14 +18,24 @@ export default function RootLayout() {
     }
   };
 
+  // ✅ Conditional background for thank-you page
+  const backgroundImage =
+    pathname === "/thank-you"
+      ? "url('/images/Success.png')" // replace with your actual bg image
+      : "url('/images/darkbg.png')";
+
+  // ✅ Conditional overlay opacity
+  const overlayClass =
+    pathname === "/thank-you" ? "bg-black/40" : "bg-black/60";
+
   return (
     <main className="min-h-screen relative overflow-hidden text-white font-mono">
       {/* background */}
       <div
         className="absolute inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: "url('/images/darkbg.png')" }}
+        style={{ backgroundImage }}
       />
-      <div className="absolute inset-0 bg-black/60 pointer-events-none" />
+      <div className={`absolute inset-0 ${overlayClass} pointer-events-none`} />
 
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* header */}
@@ -38,51 +48,13 @@ export default function RootLayout() {
               className="h-8 sm:h-9 md:h-10 w-auto object-contain select-none"
               draggable={false}
             />
-            <span 
-  className="text-sm sm:text-base tracking-wider text-gray-300"
-  style={{ fontFamily: "'Bebas Neue', sans-serif" }}
->
+            <span
+              className="text-sm sm:text-base tracking-wider text-gray-300"
+              style={{ fontFamily: "'Bebas Neue', sans-serif" }}
+            >
               ElectroMatrix
             </span>
           </Link>
-
-          {/* desktop nav */}
-          {/* <nav className="hidden sm:flex items-center gap-4 text-xs md:text-sm text-gray-400">
-            <Link
-              to="/"
-              className={`${pathname === "/" ? "text-teal-300" : ""}`}
-            >
-              Home
-            </Link>
-            <Link
-              to="/login"
-              className={`${pathname.startsWith("/login") ? "text-teal-300" : ""}`}
-
-            >
-            <span 
-              className="text-sm sm:text-base tracking-wider text-gray-300"
-              style={{ fontFamily: "'Bebas Neue', sans-serif" }}
-            >Login</span>
-              
-            </Link>
-            <Link
-              to="/quiz"
-              className={`${pathname.startsWith("/quiz") ? "text-teal-300" : ""}`}
-            >
-              Quiz
-            </Link>
-          </nav> */}
-
-          {/* mobile login button */}
-          {/* <div className="sm:hidden">
-            <Link
-              to="/login"
-              onClick={handleLoginClick}
-              className={`text-gray-300 text-sm px-3 py-1 rounded ${loginBlink ? "blink-mobile" : ""} ${loginSelected ? "login-on" : ""}`}
-            >
-              Login
-            </Link>
-          </div> */}
         </header>
 
         {/* page body */}
