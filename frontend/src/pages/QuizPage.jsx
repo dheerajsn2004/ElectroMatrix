@@ -584,6 +584,7 @@ export default function QuizPage() {
               <span className="absolute inset-0 flex items-center justify-center text-gray-300">
                 {al}{typeof mx === "number" ? `/${mx}` : ""}
               </span>
+        
             )}
           </button>
         ))
