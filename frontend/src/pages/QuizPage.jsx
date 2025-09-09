@@ -444,12 +444,12 @@ export default function QuizPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-teal-400">ElectroMatrix – Quiz</h1>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
-            <button
+            {/* <button
               onClick={() => { localStorage.removeItem("team"); localStorage.removeItem("activeSection"); navigate("/login"); }}
               className="px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 hover:bg-gray-700"
             >
               Logout
-            </button>
+            </button> */}
           </div>
         </header>
 
@@ -477,52 +477,83 @@ export default function QuizPage() {
           })}
         </div>
 
-        {/* Grid / Composite */}
-        <div className="flex items-center justify-center">
-          <div className="relative w-full max-w-md">
-            <div className="grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-1 ring-gray-700/60">
-              {!initialLoaded ? (
-                <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
-              ) : allRevealed ? (
-                <img
-                  src={assetUrl(current.compositeImageUrl)}
-                  alt={`Section ${section} Composite`}
-                  className="col-span-3 row-span-2 w-full h-full object-cover block"
-                  draggable={false}
-                  loading="eager"
-                  decoding="sync"
-                />
-              ) : (
-                current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
-                  <button
-                    key={cell}
-                    onClick={() => openCell(cell)}
-                    className="relative aspect-square p-0 m-0 border border-gray-700"
-                  >
-                    {imageUrl ? (
-                      <img
-                        src={assetUrl(imageUrl)}
-                        alt={`S${section} C${cell + 1}`}
-                        className="absolute inset-0 w-full h-full object-cover block"
-                        draggable={false}
-                        loading="eager"
-                        decoding="sync"
-                      />
-                    ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">
-                        {al}{typeof mx === "number" ? `/${mx}` : ""}
-                      </span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-
-            {allRevealed && (
-              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gray-700/60" />
+{/* Grid / Composite */}
+<div className="flex items-center justify-center">
+  <div className="relative w-full max-w-md">
+    <div
+      className={`
+        grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-2
+        ${
+          section === 1
+            ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+            : section === 2
+            ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+            : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+        }
+      `}
+    >
+      {!initialLoaded ? (
+        <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
+      ) : allRevealed ? (
+        <img
+          src={assetUrl(current.compositeImageUrl)}
+          alt={`Section ${section} Composite`}
+          className="col-span-3 row-span-2 w-full h-full object-cover block"
+          draggable={false}
+          loading="eager"
+          decoding="sync"
+        />
+      ) : (
+        current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
+          <button
+            key={cell}
+            onClick={() => openCell(cell)}
+            className={`
+              relative aspect-square p-0 m-0 border-2
+              ${
+                section === 1
+                  ? "border-cyan-400/60 shadow-[0_0_6px_rgba(0,245,255,0.25)]"
+                  : section === 2
+                  ? "border-cyan-400/80 shadow-[0_0_8px_rgba(0,245,255,0.35),0_0_14px_rgba(34,197,94,0.2)]"
+                  : "border-emerald-400/80 shadow-[0_0_10px_rgba(0,245,200,0.45),0_0_18px_rgba(34,197,94,0.3)]"
+              }
+            `}
+          >
+            {imageUrl ? (
+              <img
+                src={assetUrl(imageUrl)}
+                alt={`S${section} C${cell + 1}`}
+                className="absolute inset-0 w-full h-full object-cover block"
+                draggable={false}
+                loading="eager"
+                decoding="sync"
+              />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center text-gray-300">
+                {al}{typeof mx === "number" ? `/${mx}` : ""}
+              </span>
             )}
-          </div>
-        </div>
+          </button>
+        ))
+      )}
+    </div>
+
+    {allRevealed && (
+      <div
+        className={`
+          pointer-events-none absolute inset-0 rounded-2xl ring-2
+          ${
+            section === 1
+              ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+              : section === 2
+              ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+              : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+          }
+        `}
+      />
+    )}
+  </div>
+</div>
 
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
