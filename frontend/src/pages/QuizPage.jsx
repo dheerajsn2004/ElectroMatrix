@@ -41,7 +41,7 @@ function QuestionModal({
   options,
   imageUrl,
   attemptsLeft,
-  maxAttempts,   // NEW
+  maxAttempts,
   solved,
   errorMsg,
   onSubmit,
@@ -73,9 +73,8 @@ function QuestionModal({
       <div
         className="w-full max-w-2xl bg-gray-900 rounded-2xl border border-gray-700 text-white shadow-xl flex flex-col"
         style={{ maxHeight: "85vh" }}
-        onCopy={(e) => e.preventDefault()} /* extra guard */
+        onCopy={(e) => e.preventDefault()}
       >
-        {/* Header */}
         <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-lg sm:text-xl font-semibold">Question</h3>
           <button
@@ -87,7 +86,6 @@ function QuestionModal({
           </button>
         </div>
 
-        {/* Scrollable content */}
         <div className="flex-1 px-5 sm:px-6 py-4 overflow-y-auto">
           <p className="no-select text-gray-200 mb-4 text-sm sm:text-base whitespace-pre-wrap">
             {prompt}
@@ -113,7 +111,8 @@ function QuestionModal({
             {solved && <span className="text-emerald-400 font-medium">Solved ✓</span>}
           </div>
           {errorMsg && <p className="mt-2 text-sm text-red-400">{errorMsg}</p>}
-          <br></br>
+          <br />
+
           {type === "mcq" ? (
             <div className="space-y-2">
               {(options || []).map((o) => (
@@ -152,32 +151,18 @@ function QuestionModal({
           )}
         </div>
 
-        {/* Footer stays pinned */}
-
         <div className="px-5 sm:px-6 py-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3 sm:justify-end">
-
           <button
-  onClick={handleSubmit}
-  className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition ${
-    disabled
-      ? "bg-gray-700 cursor-not-allowed text-gray-400"
-      : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
-  }`}
-  disabled={disabled || loading}
->
-  {loading ? "Submitting…" : "Submit"}
-</button>
-
-          {/* <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2 rounded-lg border border-gray-600 hover:bg-gray-800"
-            disabled={loading}
+            onClick={handleSubmit}
+            className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition ${
+              disabled
+                ? "bg-gray-700 cursor-not-allowed text-gray-400"
+                : "bg-white/80 text-black shadow-[0_0_4px_rgba(255,255,255,0.4)] hover:bg-white hover:shadow-[0_0_6px_rgba(255,255,255,0.5)]"
+            }`}
+            disabled={disabled || loading}
           >
-            Close
-          </button> */}
-
-
-
+            {loading ? "Submitting…" : "Submit"}
+          </button>
         </div>
       </div>
     </div>
@@ -249,7 +234,6 @@ function SectionQuestionCard({ section, q, onSubmit, disabledByTime = false }) {
         >
           {submitting ? "Submitting…" : "Submit"}
         </button>
-
       </div>
       {err && <div className="mt-2 text-sm text-red-400">{err}</div>}
     </div>
@@ -264,10 +248,9 @@ export default function QuizPage() {
   }, []);
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
-  const [section, setSection] = useState(() => {
-    const saved = Number(localStorage.getItem("activeSection"));
-    return [1,2,3].includes(saved) ? saved : 1;
-  });
+  // ✅ Always start at Section 1 for any new login
+  const [section, setSection] = useState(1);
+
   const [unlockedSection, setUnlockedSection] = useState(1);
   const [sections, setSections] = useState([]);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -276,11 +259,11 @@ export default function QuizPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [currentCell, setCurrentCell] = useState(null);
   const [question, setQuestion] = useState("");
-  const [qType, setQType] = useState("text");   // ✅ fixed
+  const [qType, setQType] = useState("text");
   const [qOptions, setQOptions] = useState([]);
   const [qImage, setQImage] = useState("");
   const [attemptsLeft, setAttemptsLeft] = useState(5);
-  const [qMaxAttempts, setQMaxAttempts] = useState(5); // NEW
+  const [qMaxAttempts, setQMaxAttempts] = useState(5);
   const [solved, setSolved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -291,7 +274,10 @@ export default function QuizPage() {
   const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
-  useEffect(() => { localStorage.setItem("activeSection", String(section)); }, [section]);
+  // 🧹 On mount, clear any stale localStorage key from past sessions
+  useEffect(() => {
+    try { localStorage.removeItem("activeSection"); } catch {}
+  }, []);
 
   const loadSections = async () => {
     const { data } = await api.get("/quiz/sections");
@@ -300,12 +286,13 @@ export default function QuizPage() {
       prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
     );
 
+    // If backend reports a higher unlocked section, follow it
     if ((data.unlockedSection || 1) > section) {
       setSection(data.unlockedSection || section);
     }
 
     setSections((prev) => {
-      const next = data.sections || [];
+      const next = (data.sections || []);
       return shallowEqual(prev, next) ? prev : next;
     });
 
@@ -451,31 +438,26 @@ export default function QuizPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
-  <h1
-    className="text-2xl sm:text-3xl font-bold tracking-wide"
-    style={{
-      color: (() => {
-        const solvedSections = sections.filter((s) =>
-          s.cells.every((c) => Boolean(c.imageUrl))
-        ).length;
+          <h1
+            className="text-2xl sm:text-3xl font-bold tracking-wide"
+            style={{
+              color: (() => {
+                const solvedSections = sections.filter((s) =>
+                  s.cells.every((c) => Boolean(c.imageUrl))
+                ).length;
 
-        switch (solvedSections) {
-          case 0:
-            return "#9aa6b2"; // initial gray
-          case 1:
-            return "#c0c8d0"; // very slight white
-          case 2:
-            return "#e0e8f0"; // brighter white
-          case 3:
-            return "#ffffff"; // fully bright white
-          default:
-            return "#9aa6b2";
-        }
-      })(),
-      textShadow: (() => {
-        const solvedSections = sections.filter((s) =>
-          s.cells.every((c) => Boolean(c.imageUrl))
-        ).length;
+                switch (solvedSections) {
+                  case 0: return "#9aa6b2";
+                  case 1: return "#c0c8d0";
+                  case 2: return "#e0e8f0";
+                  case 3: return "#ffffff";
+                  default: return "#9aa6b2";
+                }
+              })(),
+              textShadow: (() => {
+                const solvedSections = sections.filter((s) =>
+                  s.cells.every((c) => Boolean(c.imageUrl))
+                ).length;
 
         switch (solvedSections) {
           case 0:
@@ -528,84 +510,83 @@ export default function QuizPage() {
           })}
         </div>
 
-{/* Grid / Composite */}
-<div className="flex items-center justify-center">
-  <div className="relative w-full max-w-md">
-    <div
-      className={`
-        grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-2
-        ${
-          section === 1
-            ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
-            : section === 2
-            ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
-            : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
-        }
-      `}
-    >
-      {!initialLoaded ? (
-        <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
-      ) : allRevealed ? (
-        <img
-          src={assetUrl(current.compositeImageUrl)}
-          alt={`Section ${section} Composite`}
-          className="col-span-3 row-span-2 w-full h-full object-cover block"
-          draggable={false}
-          loading="eager"
-          decoding="sync"
-        />
-      ) : (
-        current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
-          <button
-            key={cell}
-            onClick={() => openCell(cell)}
-            className={`
-              relative aspect-square p-0 m-0 border-2
-              ${
-                section === 1
-                  ? "border-cyan-400/60 shadow-[0_0_6px_rgba(0,245,255,0.25)]"
-                  : section === 2
-                  ? "border-cyan-400/80 shadow-[0_0_8px_rgba(0,245,255,0.35),0_0_14px_rgba(34,197,94,0.2)]"
-                  : "border-emerald-400/80 shadow-[0_0_10px_rgba(0,245,200,0.45),0_0_18px_rgba(34,197,94,0.3)]"
-              }
-            `}
-          >
-            {imageUrl ? (
-              <img
-                src={assetUrl(imageUrl)}
-                alt={`S${section} C${cell + 1}`}
-                className="absolute inset-0 w-full h-full object-cover block"
-                draggable={false}
-                loading="eager"
-                decoding="sync"
-              />
-            ) : (
-              <span className="absolute inset-0 flex items-center justify-center text-gray-300">
-                {al}{typeof mx === "number" ? `/${mx}` : ""}
-              </span>
-        
-            )}
-          </button>
-        ))
-      )}
-    </div>
+        {/* Grid / Composite */}
+        <div className="flex items-center justify-center">
+          <div className="relative w-full max-w-md">
+            <div
+              className={`
+                grid grid-cols-3 grid-rows-2 gap-0 rounded-2xl overflow-hidden ring-2
+                ${
+                  section === 1
+                    ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+                    : section === 2
+                    ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+                    : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+                }
+              `}
+            >
+              {!initialLoaded ? (
+                <div className="col-span-3 text-center text-gray-300 py-10">Loading…</div>
+              ) : allRevealed ? (
+                <img
+                  src={assetUrl(current.compositeImageUrl)}
+                  alt={`Section ${section} Composite`}
+                  className="col-span-3 row-span-2 w-full h-full object-cover block"
+                  draggable={false}
+                  loading="eager"
+                  decoding="sync"
+                />
+              ) : (
+                current.cells.map(({ cell, attemptsLeft: al, maxAttempts: mx, imageUrl }) => (
+                  <button
+                    key={cell}
+                    onClick={() => openCell(cell)}
+                    className={`
+                      relative aspect-square p-0 m-0 border-2
+                      ${
+                        section === 1
+                          ? "border-cyan-400/60 shadow-[0_0_6px_rgba(0,245,255,0.25)]"
+                          : section === 2
+                          ? "border-cyan-400/80 shadow-[0_0_8px_rgba(0,245,255,0.35),0_0_14px_rgba(34,197,94,0.2)]"
+                          : "border-emerald-400/80 shadow-[0_0_10px_rgba(0,245,200,0.45),0_0_18px_rgba(34,197,94,0.3)]"
+                      }
+                    `}
+                  >
+                    {imageUrl ? (
+                      <img
+                        src={assetUrl(imageUrl)}
+                        alt={`S${section} C${cell + 1}`}
+                        className="absolute inset-0 w-full h-full object-cover block"
+                        draggable={false}
+                        loading="eager"
+                        decoding="sync"
+                      />
+                    ) : (
+                      <span className="absolute inset-0 flex items-center justify-center text-gray-300">
+                        {al}{typeof mx === "number" ? `/${mx}` : ""}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
 
-    {allRevealed && (
-      <div
-        className={`
-          pointer-events-none absolute inset-0 rounded-2xl ring-2
-          ${
-            section === 1
-              ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
-              : section === 2
-              ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
-              : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
-          }
-        `}
-      />
-    )}
-  </div>
-</div>
+            {allRevealed && (
+              <div
+                className={`
+                  pointer-events-none absolute inset-0 rounded-2xl ring-2
+                  ${
+                    section === 1
+                      ? "ring-cyan-400/60 shadow-[0_0_8px_rgba(0,245,255,0.25)]"
+                      : section === 2
+                      ? "ring-cyan-400/80 shadow-[0_0_12px_rgba(0,245,255,0.4),0_0_20px_rgba(34,197,94,0.15)]"
+                      : "ring-emerald-400/80 shadow-[0_0_14px_rgba(0,245,200,0.45),0_0_28px_rgba(34,197,94,0.25)]"
+                  }
+                `}
+              />
+            )}
+          </div>
+        </div>
 
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
