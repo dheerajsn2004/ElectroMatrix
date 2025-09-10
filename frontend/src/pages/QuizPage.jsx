@@ -248,7 +248,7 @@ export default function QuizPage() {
   }, []);
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
-  // Always start at Layer 1 for any new login
+  // ✅ Always start at Section 1 for any new login
   const [section, setSection] = useState(1);
 
   const [unlockedSection, setUnlockedSection] = useState(1);
@@ -274,7 +274,7 @@ export default function QuizPage() {
   const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
-  // clear any stale localStorage key from past sessions
+  // 🧹 On mount, clear any stale localStorage key from past sessions
   useEffect(() => {
     try { localStorage.removeItem("activeSection"); } catch {}
   }, []);
@@ -286,6 +286,7 @@ export default function QuizPage() {
       prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
     );
 
+    // If backend reports a higher unlocked section, follow it
     if ((data.unlockedSection || 1) > section) {
       setSection(data.unlockedSection || section);
     }
@@ -311,15 +312,17 @@ export default function QuizPage() {
       setExpired(!!data.expired);
 
       const allSolved = (data.questions || []).every((q) => q.solved);
+      // Treat layer as finished if solved OR expired OR timer stopped (remainingSeconds === null) while unlocked
+      const finishedLayer = allSolved || data.expired || (!data.locked && data.remainingSeconds === null);
 
-      // If Layer 3 single question solved, go to Thank You
-      if (allSolved && sec === 3) {
+      // ⬇️ New: if it's Layer 3 and finished (including attempts exhausted), go to Thank You
+      if (sec === 3 && finishedLayer) {
         navigate("/thank-you");
         return;
       }
 
-      // ⬇️ Advance if expired OR solved OR timer has been stopped (remainingSeconds === null)
-      if (data.expired || allSolved || (!data.locked && data.remainingSeconds === null)) {
+      // Otherwise, if finished, pull next unlocked section
+      if (finishedLayer) {
         const loaded = await loadSections();
         if (loaded?.unlockedSection && loaded.unlockedSection > sec) {
           setSection(loaded.unlockedSection);
