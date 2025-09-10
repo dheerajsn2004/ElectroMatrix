@@ -12,9 +12,9 @@ const MAX_ATTEMPTS_TEXT = 5; // text questions (and section meta question)
 const MAX_ATTEMPTS_MCQ  = 4; // MCQs
 
 /* -------------------- scoring rules -------------------- */
-const GRID_POINTS_CORRECT = 2;    // grid tile question correct
-const GRID_PENALTY_WRONG_MCQ = 1; // penalty per wrong attempt (MCQ only)
-const SECTION_POINTS_CORRECT = 5; // section meta-question (single)
+const GRID_POINTS_CORRECT = 2;
+const GRID_PENALTY_WRONG_MCQ = 1;
+const SECTION_POINTS_CORRECT = 5;
 
 /* -------------------- helpers: normalization -------------------- */
 const normalize = (s = "") => String(s).trim().toLowerCase();
@@ -208,7 +208,6 @@ async function ensureAssignmentsForTeamSection(teamId, section) {
 /*                              HELPERS                                */
 /* ------------------------------------------------------------------ */
 
-// Map cell -> question type for a team+section
 async function getSectionCellTypes(teamId, section) {
   const assigns = await SectionGridAssignment.find({ team: teamId, section }).lean();
   if (!assigns.length) return new Map();
@@ -222,7 +221,6 @@ async function getSectionCellTypes(teamId, section) {
   return map;
 }
 
-// A cell is "completed" if solved OR attempts exhausted (with per-type attempt limit)
 async function teamCompletedAllCells(teamId, section) {
   const [typesByCell, responses] = await Promise.all([
     getSectionCellTypes(teamId, section),
@@ -262,7 +260,7 @@ async function ensureSectionTimer(teamId, section) {
 
 function computeRemainingSeconds(timerDoc) {
   if (!timerDoc) return null;
-  if (timerDoc.stoppedAt) return null; // stopped => treat as "no live countdown"
+  if (timerDoc.stoppedAt) return null;
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
@@ -308,7 +306,7 @@ async function computeUnlockedSection(teamId) {
   return unlocked;
 }
 
-/* -------------------- Run timing helpers (updated) -------------------- */
+/* -------------------- Run timing helpers -------------------- */
 
 async function ensureRunStarted(teamId) {
   const team = await Team.findById(teamId).select("runStartedAt runFinishedAt").lean();
@@ -494,6 +492,11 @@ export async function submitAnswer(req, res) {
   const currentAttempts = tr?.attempts || 0;
 
   if (currentAttempts >= maxAttempts) {
+    // FIX: if attempts are already exhausted, stop timer if it somehow wasn't stopped.
+    await TeamSectionTimer.findOneAndUpdate(
+      { team: teamId, section },
+      { stoppedAt: new Date() }
+    );
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
@@ -568,20 +571,20 @@ export async function getSectionQuestions(req, res) {
   const team = await Team.findById(teamId).select("runStartedAt").lean();
   const timerBelongsToRun = timer && isFromCurrentRun(timer.startedAt, team?.runStartedAt);
   let remainingSeconds = timerBelongsToRun ? computeRemainingSeconds(timer) : null;
-
-  // Consider the challenge "expired/closed" if time is 0 OR if it has already been stopped.
   let expired = false;
+
   if (timerBelongsToRun) {
     if (timer?.stoppedAt) {
       expired = true;
-      remainingSeconds = null; // no live countdown
+      remainingSeconds = null;
     } else if (remainingSeconds === 0) {
+      // Time hit zero -> stop and mark expired
       expired = true;
       await TeamSectionTimer.findOneAndUpdate(
         { _id: timer._id },
         { stoppedAt: new Date() }
       );
-      remainingSeconds = null; // reflect stopped state to clients
+      remainingSeconds = null;
     }
   }
 
@@ -590,6 +593,18 @@ export async function getSectionQuestions(req, res) {
     TeamSectionResponse.find({ team: teamId, section }).lean(),
     SectionMeta.findOne({ section }).lean()
   ]);
+
+  // FIX: if meta-question attempts are exhausted, stop the timer and mark expired
+  const metaResp = rs.find(r => r.idx === 0);
+  const metaAttempts = metaResp?.attempts || 0;
+  if (timerBelongsToRun && !timer?.stoppedAt && metaAttempts >= MAX_ATTEMPTS_TEXT) {
+    await TeamSectionTimer.findOneAndUpdate(
+      { _id: timer._id },
+      { stoppedAt: new Date() }
+    );
+    expired = true;
+    remainingSeconds = null;
+  }
 
   const rMap = new Map(rs.map(r => [r.idx, r]));
   const questions = qs.map(q => {
@@ -633,7 +648,6 @@ export async function submitSectionAnswer(req, res) {
     return res.status(403).json({ error: "Section challenge locked" });
   }
 
-  // If time exhausted or timer already stopped -> close it & reject answering
   let remainingSeconds = computeRemainingSeconds(timer);
   if (timer.stoppedAt || remainingSeconds === 0) {
     if (!timer.stoppedAt) {
@@ -661,10 +675,15 @@ export async function submitSectionAnswer(req, res) {
     });
   }
   if (currentAttempts >= MAX_ATTEMPTS_TEXT) {
+    // FIX: Attempts used up -> stop timer immediately
+    await TeamSectionTimer.findOneAndUpdate(
+      { team: teamId, section },
+      { stoppedAt: new Date() }
+    );
     return res.status(403).json({
       error: "No attempts left",
       attemptsLeft: 0,
-      remainingSeconds,
+      remainingSeconds: null,
       completed: await sectionCompleted(teamId, section)
     });
   }
@@ -692,6 +711,12 @@ export async function submitSectionAnswer(req, res) {
     if (section === 3) {
       await finalizeRunIfDone(teamId);
     }
+  } else if (attempts >= MAX_ATTEMPTS_TEXT) {
+    // FIX: This submission just exhausted attempts -> stop timer now
+    await TeamSectionTimer.findOneAndUpdate(
+      { team: teamId, section },
+      { stoppedAt: new Date() }
+    );
   }
 
   const timerAfter = await TeamSectionTimer.findOne({ team: teamId, section }).lean();
