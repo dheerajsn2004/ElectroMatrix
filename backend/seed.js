@@ -42,7 +42,7 @@ async function addTeam(username, rawPassword) {
     await addTeam("team17", "team17pass");
     await addTeam("team18", "team18pass");
     await addTeam("team19", "team19pass");
-    await addTeam("team20", "team20pass");
+    await addTeam("team20", "team20xyz");
 
     const total = await Team.countDocuments();
     console.log(`📊 Total teams in DB: ${total}`);
