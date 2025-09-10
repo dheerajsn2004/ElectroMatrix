@@ -522,7 +522,7 @@ export default function QuizPage() {
                 }`}
                 title={locked ? "Locked: finish previous section" : ""}
               >
-                Section {s}{locked ? " 🔒" : ""}
+                Layer {s}{locked ? " 🔒" : ""}
               </button>
             );
           })}
@@ -610,7 +610,7 @@ export default function QuizPage() {
         {/* Section Challenge */}
         <div className="mt-8 sm:mt-10">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h3 className="text-lg sm:text-xl font-semibold">Section {section} Challenge</h3>
+            <h3 className="text-lg sm:text-xl font-semibold">Layer {section} Challenge</h3>
             {!bonusLocked && (
               <div className={`text-sm px-3 py-1 rounded-lg border ${
                 expired ? "border-red-500 text-red-400" :

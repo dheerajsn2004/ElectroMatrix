@@ -57,8 +57,11 @@ export default function LandingPage() {
 
 
 
-    <button onClick={() => navigate("/login")} className="btn-primary px-4 py-2 mt-6 text-sm sm:text-base">
-      Get Started <span className="text-xl leading-none">→</span>
+    <button
+      onClick={() => navigate("/login")}
+      className="btn-primary px-5 py-3 mt-6 text-base sm:text-base"
+    >
+      Access Matrix <span className="text-2xl leading-none">→</span>
     </button>
   </div>
 </div>

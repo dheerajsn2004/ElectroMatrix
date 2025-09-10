@@ -24,8 +24,8 @@ export default function LoginPage() {
     <section className="page-shell flex items-center justify-center">
       <div className="w-full max-w-md card flex flex-col items-center">
         {/* Centered title */}
-        <h1 className="text-2xl font-bold text-teal-400 mb-6 text-center">
-          Team Login
+        <h1 className="text-2xl font-medium text-teal-400 mb-6 text-center">
+          Matrix Credentials
         </h1>
 
         <form onSubmit={submit} className="w-full space-y-4">
