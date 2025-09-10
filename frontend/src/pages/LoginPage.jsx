@@ -11,9 +11,16 @@ export default function LoginPage() {
   const submit = async (e) => {
     e.preventDefault();
     setMessage("");
+
+    // ✅ Make sure any previous user's section state is gone
+    try { localStorage.removeItem("activeSection"); } catch {}
+
     try {
       const res = await api.post("/login", { username, password });
+
+      // Store only the team; section will always start at 1 in QuizPage
       localStorage.setItem("team", JSON.stringify(res.data.team));
+
       navigate("/quiz");
     } catch (err) {
       setMessage(err.response?.data?.error || "Login failed");
@@ -23,7 +30,6 @@ export default function LoginPage() {
   return (
     <section className="page-shell flex items-center justify-center">
       <div className="w-full max-w-md card flex flex-col items-center">
-        {/* Centered title */}
         <h1 className="text-2xl font-bold text-teal-400 mb-6 text-center">
           Team Login
         </h1>
@@ -42,13 +48,12 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-         <button
-  type="submit"
-  className="btn-primary w-full flex items-center justify-center text-center"
->
-  Login
-</button>
-
+          <button
+            type="submit"
+            className="btn-primary w-full flex items-center justify-center text-center"
+          >
+            Login
+          </button>
         </form>
 
         {message && <p className="mt-4 text-center text-red-300">{message}</p>}
