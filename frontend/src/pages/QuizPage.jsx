@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../utils/api";
-import BreakConnectionButton from "../components/BreakConnectionButton";
 
 /* --------------------- small helpers --------------------- */
 function shallowEqual(a, b) {
@@ -494,13 +493,13 @@ export default function QuizPage() {
       transition: "color 1s ease-in-out, text-shadow 1s ease-in-out",
     }}
   >
-    ElectroMatrix – Quiz
+    ElectroMatrix 
   </h1>
 
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
-<BreakConnectionButton message="Don’t give up! Each try brings you closer to success." />
+{/* <BreakConnectionButton message="Don’t give up! Each try brings you closer to success." /> */}
 
           </div>
         </header>
