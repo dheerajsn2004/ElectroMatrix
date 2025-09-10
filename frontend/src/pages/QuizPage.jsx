@@ -248,7 +248,7 @@ export default function QuizPage() {
   }, []);
   useEffect(() => { if (!team) navigate("/login"); }, [team, navigate]);
 
-  // ✅ Always start at Section 1 for any new login
+  // Always start at Layer 1 for any new login
   const [section, setSection] = useState(1);
 
   const [unlockedSection, setUnlockedSection] = useState(1);
@@ -274,7 +274,7 @@ export default function QuizPage() {
   const [remaining, setRemaining] = useState(null);
   const [expired, setExpired] = useState(false);
 
-  // 🧹 On mount, clear any stale localStorage key from past sessions
+  // clear any stale localStorage key from past sessions
   useEffect(() => {
     try { localStorage.removeItem("activeSection"); } catch {}
   }, []);
@@ -286,7 +286,6 @@ export default function QuizPage() {
       prev === (data.unlockedSection || 1) ? prev : (data.unlockedSection || 1)
     );
 
-    // If backend reports a higher unlocked section, follow it
     if ((data.unlockedSection || 1) > section) {
       setSection(data.unlockedSection || section);
     }
@@ -313,13 +312,14 @@ export default function QuizPage() {
 
       const allSolved = (data.questions || []).every((q) => q.solved);
 
-      // If Section 3 single question solved, go to Thank You
+      // If Layer 3 single question solved, go to Thank You
       if (allSolved && sec === 3) {
         navigate("/thank-you");
         return;
       }
 
-      if (data.expired || allSolved) {
+      // ⬇️ Advance if expired OR solved OR timer has been stopped (remainingSeconds === null)
+      if (data.expired || allSolved || (!data.locked && data.remainingSeconds === null)) {
         const loaded = await loadSections();
         if (loaded?.unlockedSection && loaded.unlockedSection > sec) {
           setSection(loaded.unlockedSection);
@@ -459,30 +459,22 @@ export default function QuizPage() {
                   s.cells.every((c) => Boolean(c.imageUrl))
                 ).length;
 
-        switch (solvedSections) {
-          case 0:
-            return "0 0 4px rgba(0,245,255,0.3)";
-          case 1:
-            return "0 0 8px rgba(0,245,255,0.5)";
-          case 2:
-            return "0 0 12px rgba(0,245,255,0.7)";
-          case 3:
-            return "0 0 20px rgba(0,245,255,1)";
-          default:
-            return "0 0 4px rgba(0,245,255,0.3)";
-        }
-      })(),
-      transition: "color 1s ease-in-out, text-shadow 1s ease-in-out",
-    }}
-  >
-    ElectroMatrix 
-  </h1>
-
+                switch (solvedSections) {
+                  case 0: return "0 0 4px rgba(0,245,255,0.3)";
+                  case 1: return "0 0 8px rgba(0,245,255,0.5)";
+                  case 2: return "0 0 12px rgba(0,245,255,0.7)";
+                  case 3: return "0 0 20px rgba(0,245,255,1)";
+                  default: return "0 0 4px rgba(0,245,255,0.3)";
+                }
+              })(),
+              transition: "color 1s ease-in-out, text-shadow 1s ease-in-out",
+            }}
+          >
+            ElectroMatrix
+          </h1>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <span className="text-sm text-gray-300 flex-1 sm:flex-none truncate">Team: {team?.username || "—"}</span>
-{/* <BreakConnectionButton message="Don’t give up! Each try brings you closer to success." /> */}
-
           </div>
         </header>
 

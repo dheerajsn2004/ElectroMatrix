@@ -1,4 +1,3 @@
-// backend/controllers/quizController.js
 import GridQuestion from "../models/GridQuestion.js";
 import SectionGridAssignment from "../models/SectionGridAssignment.js";
 import TeamResponse from "../models/TeamResponse.js";
@@ -263,7 +262,7 @@ async function ensureSectionTimer(teamId, section) {
 
 function computeRemainingSeconds(timerDoc) {
   if (!timerDoc) return null;
-  if (timerDoc.stoppedAt) return null;
+  if (timerDoc.stoppedAt) return null; // stopped => treat as "no live countdown"
   const elapsed = Math.floor((Date.now() - new Date(timerDoc.startedAt).getTime()) / 1000);
   return Math.max(0, timerDoc.durationSec - elapsed);
 }
@@ -320,7 +319,6 @@ async function ensureRunStarted(teamId) {
   ]);
   const hasAnyResponses = gridCount > 0 || sectionCount > 0;
 
-  // Fresh DB for this team (no answers) but team shows an old run -> fully reset artifacts
   if (!hasAnyResponses && (team?.runFinishedAt || team?.runStartedAt)) {
     await Promise.all([
       TeamSectionTimer.deleteMany({ team: teamId }),
@@ -364,7 +362,6 @@ async function finalizeRunIfDone(teamId) {
   const done = await allSectionsCompleted(teamId);
   if (!done) return;
 
-  // Mark completion time, but DO NOT store total duration
   await Team.findByIdAndUpdate(teamId, { runFinishedAt: new Date() });
 }
 
@@ -570,14 +567,22 @@ export async function getSectionQuestions(req, res) {
 
   const team = await Team.findById(teamId).select("runStartedAt").lean();
   const timerBelongsToRun = timer && isFromCurrentRun(timer.startedAt, team?.runStartedAt);
-  const remainingSeconds = timerBelongsToRun ? computeRemainingSeconds(timer) : null;
-  const expired = timerBelongsToRun ? remainingSeconds === 0 : false;
+  let remainingSeconds = timerBelongsToRun ? computeRemainingSeconds(timer) : null;
 
-  if (expired && timer && !timer.stoppedAt) {
-    await TeamSectionTimer.findOneAndUpdate(
-      { _id: timer._id },
-      { stoppedAt: new Date() }
-    );
+  // Consider the challenge "expired/closed" if time is 0 OR if it has already been stopped.
+  let expired = false;
+  if (timerBelongsToRun) {
+    if (timer?.stoppedAt) {
+      expired = true;
+      remainingSeconds = null; // no live countdown
+    } else if (remainingSeconds === 0) {
+      expired = true;
+      await TeamSectionTimer.findOneAndUpdate(
+        { _id: timer._id },
+        { stoppedAt: new Date() }
+      );
+      remainingSeconds = null; // reflect stopped state to clients
+    }
   }
 
   const [qs, rs, meta] = await Promise.all([
@@ -628,8 +633,9 @@ export async function submitSectionAnswer(req, res) {
     return res.status(403).json({ error: "Section challenge locked" });
   }
 
-  const remainingSeconds = computeRemainingSeconds(timer);
-  if (remainingSeconds === 0) {
+  // If time exhausted or timer already stopped -> close it & reject answering
+  let remainingSeconds = computeRemainingSeconds(timer);
+  if (timer.stoppedAt || remainingSeconds === 0) {
     if (!timer.stoppedAt) {
       await TeamSectionTimer.findOneAndUpdate(
         { _id: timer._id },
@@ -688,7 +694,8 @@ export async function submitSectionAnswer(req, res) {
     }
   }
 
-  const nowRemaining = computeRemainingSeconds(timer);
+  const timerAfter = await TeamSectionTimer.findOne({ team: teamId, section }).lean();
+  const nowRemaining = computeRemainingSeconds(timerAfter);
   const completedNow = await sectionCompleted(teamId, section);
 
   return res.json({
